@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import plotly.express as px
+from models import Student, Staff, Task, get_db
+from sqlalchemy import func
+from sqlalchemy import Integer
 
 # Page configuration
 st.set_page_config(
@@ -22,13 +25,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state for data storage
-if 'students_df' not in st.session_state:
-    st.session_state.students_df = pd.DataFrame(columns=['name', 'goals', 'needs'])
-if 'staff_df' not in st.session_state:
-    st.session_state.staff_df = pd.DataFrame(columns=['name', 'expertise'])
-if 'tasks_df' not in st.session_state:
-    st.session_state.tasks_df = pd.DataFrame(columns=['description', 'category', 'staff_assigned', 'student', 'deadline', 'completed'])
+# Database session
+db = get_db()
 
 # Sidebar configuration
 with st.sidebar:
@@ -43,9 +41,11 @@ with st.sidebar:
     st.markdown('### Quick Stats')
     col1, col2 = st.columns(2)
     with col1:
-        st.metric('Students', len(st.session_state.students_df))
+        student_count = db.query(func.count(Student.id)).scalar()
+        st.metric('Students', student_count)
     with col2:
-        st.metric('Staff', len(st.session_state.staff_df))
+        staff_count = db.query(func.count(Staff.id)).scalar()
+        st.metric('Staff', staff_count)
 
     st.markdown('---')
     st.caption('Educational Task Management System v1.0')
@@ -71,12 +71,13 @@ def add_student():
         submitted = st.form_submit_button('Add Student')
         if submitted:
             if name and goals and needs:
-                new_student = pd.DataFrame({
-                    'name': [name],
-                    'goals': [','.join(goals)],
-                    'needs': [','.join(needs)]
-                })
-                st.session_state.students_df = pd.concat([st.session_state.students_df, new_student], ignore_index=True)
+                new_student = Student(
+                    name=name,
+                    goals=','.join(goals),
+                    needs=','.join(needs)
+                )
+                db.add(new_student)
+                db.commit()
                 st.success(f'✅ Student {name} added successfully!')
             else:
                 st.error('❌ Please fill in all fields')
@@ -96,11 +97,12 @@ def add_staff():
         submitted = st.form_submit_button('Add Staff Member')
         if submitted:
             if name and expertise:
-                new_staff = pd.DataFrame({
-                    'name': [name],
-                    'expertise': [','.join(expertise)]
-                })
-                st.session_state.staff_df = pd.concat([st.session_state.staff_df, new_staff], ignore_index=True)
+                new_staff = Staff(
+                    name=name,
+                    expertise=','.join(expertise)
+                )
+                db.add(new_staff)
+                db.commit()
                 st.success(f'✅ Staff member {name} added successfully!')
             else:
                 st.error('❌ Please fill in all fields')
@@ -109,7 +111,10 @@ def create_task():
     st.header('✔️ Task Management')
     st.subheader('Create New Task')
 
-    if st.session_state.staff_df.empty or st.session_state.students_df.empty:
+    staff_count = db.query(func.count(Staff.id)).scalar()
+    student_count = db.query(func.count(Student.id)).scalar()
+
+    if staff_count == 0 or student_count == 0:
         st.warning('⚠️ Please add both students and staff members before creating tasks.')
         return
 
@@ -121,9 +126,11 @@ def create_task():
                 'Task Category',
                 ['Math', 'ELA', 'Social Skills', 'Science', 'Fine Motor Skills']
             )
-            staff = st.selectbox('Assign Staff', st.session_state.staff_df['name'].tolist())
+            staff_list = db.query(Staff).all()
+            staff = st.selectbox('Assign Staff', [s.name for s in staff_list])
         with col2:
-            student = st.selectbox('Select Student', st.session_state.students_df['name'].tolist())
+            student_list = db.query(Student).all()
+            student = st.selectbox('Select Student', [s.name for s in student_list])
             deadline = st.date_input(
                 'Deadline',
                 min_value=datetime.now().date(),
@@ -133,15 +140,19 @@ def create_task():
         submitted = st.form_submit_button('Create Task')
         if submitted:
             if description and category and staff and student and deadline:
-                new_task = pd.DataFrame({
-                    'description': [description],
-                    'category': [category],
-                    'staff_assigned': [staff],
-                    'student': [student],
-                    'deadline': [deadline],
-                    'completed': [False]
-                })
-                st.session_state.tasks_df = pd.concat([st.session_state.tasks_df, new_task], ignore_index=True)
+                staff_obj = db.query(Staff).filter(Staff.name == staff).first()
+                student_obj = db.query(Student).filter(Student.name == student).first()
+
+                new_task = Task(
+                    description=description,
+                    category=category,
+                    staff_id=staff_obj.id,
+                    student_id=student_obj.id,
+                    deadline=deadline,
+                    completed=False
+                )
+                db.add(new_task)
+                db.commit()
                 st.success('✅ Task created successfully!')
             else:
                 st.error('❌ Please fill in all fields')
@@ -149,34 +160,46 @@ def create_task():
 def track_progress():
     st.header('📊 Progress Tracking')
 
-    if st.session_state.tasks_df.empty:
+    tasks = db.query(Task).all()
+    if not tasks:
         st.info('ℹ️ No tasks available to track')
         return
 
-    for idx, task in st.session_state.tasks_df.iterrows():
+    for task in tasks:
         with st.container():
             col1, col2, col3 = st.columns([3, 1, 1])
             with col1:
-                st.write(f"📌 Task: {task['description']}")
-                st.caption(f"👤 Assigned to: {task['staff_assigned']} | 👨‍🎓 Student: {task['student']}")
+                st.write(f"📌 Task: {task.description}")
+                st.caption(f"👤 Assigned to: {task.staff_member.name} | 👨‍🎓 Student: {task.student.name}")
             with col2:
-                st.write(f"📅 Due: {task['deadline']}")
+                st.write(f"📅 Due: {task.deadline}")
             with col3:
-                if st.checkbox('✓ Complete', value=task['completed'], key=f'task_{idx}'):
-                    st.session_state.tasks_df.at[idx, 'completed'] = True
+                if st.checkbox('✓ Complete', value=task.completed, key=f'task_{task.id}'):
+                    task.completed = True
+                    db.commit()
                 else:
-                    st.session_state.tasks_df.at[idx, 'completed'] = False
+                    task.completed = False
+                    db.commit()
 
 def generate_reports():
     st.header('📈 Reports Dashboard')
 
-    if st.session_state.tasks_df.empty:
+    tasks = db.query(Task).all()
+    if not tasks:
         st.info('ℹ️ No task data available for reporting')
         return
 
     # Task completion statistics
-    completion_stats = st.session_state.tasks_df.groupby('staff_assigned')['completed'].agg(['count', 'sum']).reset_index()
-    completion_stats.columns = ['Staff', 'Total Tasks', 'Completed Tasks']
+    staff_stats = db.query(
+        Staff.name,
+        func.count(Task.id).label('total_tasks'),
+        func.sum(Task.completed.cast(Integer)).label('completed_tasks')
+    ).join(Task).group_by(Staff.name).all()
+
+    completion_stats = pd.DataFrame(
+        [(s.name, s.total_tasks, s.completed_tasks) for s in staff_stats],
+        columns=['Staff', 'Total Tasks', 'Completed Tasks']
+    )
     completion_stats['Completion Rate'] = (completion_stats['Completed Tasks'] / completion_stats['Total Tasks'] * 100).round(2)
 
     # Display statistics
@@ -194,10 +217,18 @@ def generate_reports():
     st.plotly_chart(fig, use_container_width=True)
 
     # Student progress
-    st.subheader('👨‍🎓 Student Task Progress')
-    student_progress = st.session_state.tasks_df.groupby('student')['completed'].agg(['count', 'sum']).reset_index()
-    student_progress.columns = ['Student', 'Total Tasks', 'Completed Tasks']
+    student_stats = db.query(
+        Student.name,
+        func.count(Task.id).label('total_tasks'),
+        func.sum(Task.completed.cast(Integer)).label('completed_tasks')
+    ).join(Task).group_by(Student.name).all()
+
+    student_progress = pd.DataFrame(
+        [(s.name, s.total_tasks, s.completed_tasks) for s in student_stats],
+        columns=['Student', 'Total Tasks', 'Completed Tasks']
+    )
     student_progress['Completion Rate'] = (student_progress['Completed Tasks'] / student_progress['Total Tasks'] * 100).round(2)
+    st.subheader('👨‍🎓 Student Task Progress')
     st.dataframe(student_progress, use_container_width=True)
 
 def show_dashboard():
@@ -206,21 +237,23 @@ def show_dashboard():
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric('Total Students', len(st.session_state.students_df))
+        student_count = db.query(func.count(Student.id)).scalar()
+        st.metric('Total Students', student_count)
     with col2:
-        st.metric('Total Staff', len(st.session_state.staff_df))
+        staff_count = db.query(func.count(Staff.id)).scalar()
+        st.metric('Total Staff', staff_count)
     with col3:
-        total_tasks = len(st.session_state.tasks_df)
-        completed_tasks = st.session_state.tasks_df['completed'].sum()
+        total_tasks = db.query(func.count(Task.id)).scalar()
+        completed_tasks = db.query(func.count(Task.id)).filter(Task.completed == True).scalar()
         st.metric('Tasks', f'{completed_tasks}/{total_tasks} Complete')
 
     st.markdown('---')
 
-    if not st.session_state.tasks_df.empty:
+    recent_tasks = db.query(Task).order_by(Task.deadline).limit(5).all()
+    if recent_tasks:
         st.subheader('📅 Recent Tasks')
-        recent_tasks = st.session_state.tasks_df.sort_values('deadline').head(5)
-        for _, task in recent_tasks.iterrows():
-            st.write(f"• {task['description']} - Due: {task['deadline']}")
+        for task in recent_tasks:
+            st.write(f"• {task.description} - Due: {task.deadline}")
     else:
         st.info('ℹ️ No tasks created yet. Start by adding students and staff members!')
 
@@ -229,22 +262,34 @@ if page == 'Dashboard':
     show_dashboard()
 elif page == 'Student Management':
     add_student()
-    if not st.session_state.students_df.empty:
+    students = db.query(Student).all()
+    if students:
         st.markdown('---')
         st.subheader('📚 Current Students')
-        st.dataframe(st.session_state.students_df, use_container_width=True)
+        student_df = pd.DataFrame([(s.name, s.goals, s.needs) for s in students], 
+                                columns=['name', 'goals', 'needs'])
+        st.dataframe(student_df, use_container_width=True)
 elif page == 'Staff Management':
     add_staff()
-    if not st.session_state.staff_df.empty:
+    staff = db.query(Staff).all()
+    if staff:
         st.markdown('---')
         st.subheader('👥 Current Staff')
-        st.dataframe(st.session_state.staff_df, use_container_width=True)
+        staff_df = pd.DataFrame([(s.name, s.expertise) for s in staff],
+                              columns=['name', 'expertise'])
+        st.dataframe(staff_df, use_container_width=True)
 elif page == 'Task Management':
     create_task()
-    if not st.session_state.tasks_df.empty:
+    tasks = db.query(Task).all()
+    if tasks:
         st.markdown('---')
         st.subheader('📋 Current Tasks')
-        st.dataframe(st.session_state.tasks_df, use_container_width=True)
+        task_df = pd.DataFrame(
+            [(t.description, t.category, t.staff_member.name, t.student.name, t.deadline, t.completed) 
+             for t in tasks],
+            columns=['description', 'category', 'staff_assigned', 'student', 'deadline', 'completed']
+        )
+        st.dataframe(task_df, use_container_width=True)
 elif page == 'Progress Tracking':
     track_progress()
 elif page == 'Reports':
