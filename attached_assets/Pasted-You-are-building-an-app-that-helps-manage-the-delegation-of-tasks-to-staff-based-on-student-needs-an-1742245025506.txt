@@ -1,0 +1,110 @@
+You are building an app that helps manage the delegation of tasks to staff based on student needs and educational goals. The app will allow for input of student data, automatic task assignment, progress tracking, and reporting.
+
+Features to Build:
+
+Student Profile System:
+
+Create a Student class that includes:
+Student's name
+Educational goals (e.g., ELA, Math, Social Skills, etc.)
+Specific needs (e.g., reading comprehension, fine motor skills)
+Task Management System:
+
+Create a Task class that includes:
+Task description
+Assigned staff
+Task category (e.g., Math, ELA, etc.)
+Task deadline
+Completion status
+Implement a function that assigns tasks to staff based on the student’s needs and educational goals.
+Task Delegation:
+
+Create a function assign_tasks_to_staff() that:
+Takes the student’s goals and needs as input
+Assigns tasks to the appropriate staff (based on their specialization and available time)
+Progress Tracking:
+
+Implement a function track_task_progress() that:
+Tracks whether staff have completed their assigned tasks.
+Updates task completion status and tracks completion time.
+Reporting:
+
+Create a function generate_reports() that generates:
+A summary of tasks completed by each staff member
+A report of student progress based on task completion
+User Interface (UI):
+
+Implement a simple console-based interface where staff can:
+View their assigned tasks
+Update task status
+View student progress
+Example Structure:
+
+python
+Copy
+Edit
+class Student:
+    def __init__(self, name, goals, needs):
+        self.name = name
+        self.goals = goals
+        self.needs = needs
+
+class Task:
+    def __init__(self, description, category, staff_assigned, deadline):
+        self.description = description
+        self.category = category
+        self.staff_assigned = staff_assigned
+        self.deadline = deadline
+        self.completed = False
+
+    def complete_task(self):
+        self.completed = True
+
+class Staff:
+    def __init__(self, name, expertise):
+        self.name = name
+        self.expertise = expertise
+        self.tasks = []
+
+    def assign_task(self, task):
+        self.tasks.append(task)
+
+# Functions to assign tasks, track progress, etc.
+
+def assign_tasks_to_staff(staff_list, student):
+    # Example logic for task assignment
+    for staff in staff_list:
+        if student.needs in staff.expertise:
+            # Assign task based on expertise
+            new_task = Task("Help with " + student.needs, student.goals, staff.name, "2025-03-21")
+            staff.assign_task(new_task)
+
+def track_task_progress(staff):
+    # Track the progress of tasks assigned to a staff member
+    for task in staff.tasks:
+        if task.completed:
+            print(f"{task.description} for {staff.name} is completed.")
+        else:
+            print(f"{task.description} for {staff.name} is pending.")
+
+def generate_reports(staff_list):
+    # Generate a report based on task completion
+    for staff in staff_list:
+        print(f"Report for {staff.name}:")
+        track_task_progress(staff)
+
+# Sample data
+staff1 = Staff("Alice", ["Math", "Dyslexia"])
+staff2 = Staff("Bob", ["Reading", "Math"])
+
+student1 = Student("John", "Math", "Reading comprehension")
+
+staff_list = [staff1, staff2]
+assign_tasks_to_staff(staff_list, student1)
+generate_reports(staff_list)
+Next Steps:
+Build the Student Profile and Task System: Begin by creating the basic classes (Student, Task, Staff) and their attributes.
+Task Assignment Functionality: Implement logic to assign tasks to staff based on student needs.
+Progress Tracking: Add functionality to update and track the completion of tasks.
+Reporting System: Generate reports showing task completion and student progress.
+Once you complete these steps, the next step would be integrating the app with a database (e.g., PostgreSQL) to store student data and task information, as well as developing a front-end interface to make it more user-friendly.
