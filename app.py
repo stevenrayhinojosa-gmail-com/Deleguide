@@ -6,6 +6,7 @@ from models import Student, Staff, Task, get_db
 from sqlalchemy import func
 from sqlalchemy import Integer
 from daily_task_feed import DailyTaskFeedGenerator
+from task_recommender import TaskRecommendationEngine
 
 # Page configuration
 st.set_page_config(
@@ -35,7 +36,7 @@ with st.sidebar:
     st.markdown('---')
     page = st.selectbox(
         'Choose a section',
-        ['Dashboard', 'Daily Task Feed', 'Student Management', 'Staff Management', 'Task Management', 'Progress Tracking', 'Reports'],
+        ['Dashboard', 'Daily Task Feed', 'Task Recommendations', 'Student Management', 'Staff Management', 'Task Management', 'Progress Tracking', 'Reports'],
         index=0
     )
     st.markdown('---')
@@ -333,6 +334,243 @@ def show_daily_task_feed():
                 except Exception as e:
                     st.error(f"❌ Error generating staff summary: {str(e)}")
 
+def show_task_recommendations():
+    st.header('🎯 Task Recommendations')
+    st.subheader('AI-Powered Task Suggestions Based on IEP Goals')
+    
+    # Get all students for selection
+    students = db.query(Student).all()
+    
+    if not students:
+        st.warning('⚠️ No students found. Please add students first to get task recommendations.')
+        return
+    
+    # Student selection and recommendation generation
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        selected_student_name = st.selectbox(
+            'Select a student for task recommendations:',
+            [s.name for s in students],
+            key='recommendation_student_selector'
+        )
+    
+    with col2:
+        if st.button('🔄 Generate Recommendations', type='primary'):
+            st.rerun()
+    
+    if selected_student_name:
+        selected_student = db.query(Student).filter(Student.name == selected_student_name).first()
+        
+        if selected_student:
+            try:
+                engine = TaskRecommendationEngine()
+                recommendations = engine.suggest_tasks_for_student(selected_student.id)
+                
+                if "error" in recommendations:
+                    st.error(f"❌ {recommendations['error']}")
+                    return
+                
+                # Display student information
+                st.markdown("---")
+                st.subheader(f"📋 Recommendations for {recommendations['student_name']}")
+                
+                # Student details in columns
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Total Suggestions", recommendations['total_suggestions'])
+                
+                with col2:
+                    if recommendations.get('ard_date'):
+                        days_until = (recommendations['ard_date'] - datetime.now().date()).days
+                        if days_until >= 0:
+                            st.metric("Days to ARD", days_until)
+                        else:
+                            st.metric("ARD Status", "Past Due")
+                    else:
+                        st.metric("ARD Date", "Not Set")
+                
+                with col3:
+                    keywords_found = len(recommendations.get('keywords_found', []))
+                    st.metric("Keywords Matched", keywords_found)
+                
+                # Display keywords found
+                if recommendations.get('keywords_found'):
+                    st.info(f"🔍 **Keywords Found:** {', '.join(recommendations['keywords_found'])}")
+                
+                # Display recommendations
+                if recommendations['recommendations']:
+                    st.markdown("---")
+                    st.subheader("💡 Suggested Tasks")
+                    
+                    # Group recommendations by priority
+                    high_priority = [r for r in recommendations['recommendations'] if r['priority'] == 'high']
+                    medium_priority = [r for r in recommendations['recommendations'] if r['priority'] == 'medium']
+                    
+                    # High priority tasks
+                    if high_priority:
+                        st.markdown("### 🔥 High Priority Tasks")
+                        for i, rec in enumerate(high_priority, 1):
+                            with st.expander(f"{i}. {rec['task_name']}", expanded=True):
+                                col1, col2 = st.columns([2, 1])
+                                
+                                with col1:
+                                    st.write(f"**Reason:** {rec['reason']}")
+                                    st.write(f"**Category:** {rec['category']}")
+                                    st.write(f"**Suggested Frequency:** {rec['frequency']}")
+                                    
+                                    # Get staff recommendations
+                                    staff_recs = engine.get_staff_recommendations(rec['category'])
+                                    if staff_recs:
+                                        st.write(f"**Recommended Staff:** {', '.join(staff_recs[:3])}")
+                                
+                                with col2:
+                                    if st.button(f"✅ Create Task", key=f"create_high_{i}"):
+                                        # Create the task automatically
+                                        staff_list = db.query(Staff).all()
+                                        if staff_list:
+                                            # Try to assign to recommended staff or first available
+                                            staff_to_assign = None
+                                            if staff_recs:
+                                                for staff_rec_name in staff_recs:
+                                                    staff_obj = db.query(Staff).filter(Staff.name == staff_rec_name).first()
+                                                    if staff_obj:
+                                                        staff_to_assign = staff_obj
+                                                        break
+                                            
+                                            if not staff_to_assign:
+                                                staff_to_assign = staff_list[0]
+                                            
+                                            # Set deadline based on frequency
+                                            if rec['frequency'] == 'Daily':
+                                                deadline = datetime.now().date() + timedelta(days=1)
+                                            elif rec['frequency'] == 'Once a Month':
+                                                deadline = datetime.now().date() + timedelta(days=30)
+                                            else:
+                                                deadline = datetime.now().date() + timedelta(days=7)
+                                            
+                                            new_task = Task(
+                                                description=rec['task_name'],
+                                                category=rec['category'],
+                                                staff_id=staff_to_assign.id,
+                                                student_id=selected_student.id,
+                                                deadline=deadline,
+                                                frequency=rec['frequency'],
+                                                completed=False
+                                            )
+                                            
+                                            db.add(new_task)
+                                            db.commit()
+                                            st.success(f"✅ Task '{rec['task_name']}' created successfully!")
+                                            st.rerun()
+                    
+                    # Medium priority tasks
+                    if medium_priority:
+                        st.markdown("### 📌 Medium Priority Tasks")
+                        for i, rec in enumerate(medium_priority, 1):
+                            with st.expander(f"{i}. {rec['task_name']}"):
+                                col1, col2 = st.columns([2, 1])
+                                
+                                with col1:
+                                    st.write(f"**Reason:** {rec['reason']}")
+                                    st.write(f"**Category:** {rec['category']}")
+                                    st.write(f"**Suggested Frequency:** {rec['frequency']}")
+                                    
+                                    # Get staff recommendations
+                                    staff_recs = engine.get_staff_recommendations(rec['category'])
+                                    if staff_recs:
+                                        st.write(f"**Recommended Staff:** {', '.join(staff_recs[:3])}")
+                                
+                                with col2:
+                                    if st.button(f"✅ Create Task", key=f"create_med_{i}"):
+                                        # Same task creation logic as above
+                                        staff_list = db.query(Staff).all()
+                                        if staff_list:
+                                            staff_to_assign = staff_list[0]  # Simplified for medium priority
+                                            
+                                            if rec['frequency'] == 'Daily':
+                                                deadline = datetime.now().date() + timedelta(days=1)
+                                            elif rec['frequency'] == 'Once a Month':
+                                                deadline = datetime.now().date() + timedelta(days=30)
+                                            else:
+                                                deadline = datetime.now().date() + timedelta(days=7)
+                                            
+                                            new_task = Task(
+                                                description=rec['task_name'],
+                                                category=rec['category'],
+                                                staff_id=staff_to_assign.id,
+                                                student_id=selected_student.id,
+                                                deadline=deadline,
+                                                frequency=rec['frequency'],
+                                                completed=False
+                                            )
+                                            
+                                            db.add(new_task)
+                                            db.commit()
+                                            st.success(f"✅ Task '{rec['task_name']}' created successfully!")
+                                            st.rerun()
+                
+                else:
+                    st.info("✅ No new task recommendations at this time. All appropriate tasks may already be assigned.")
+                
+                # Show existing tasks for reference
+                existing_tasks = db.query(Task).filter(
+                    Task.student_id == selected_student.id,
+                    Task.completed == False
+                ).all()
+                
+                if existing_tasks:
+                    st.markdown("---")
+                    st.subheader("📋 Current Active Tasks")
+                    for task in existing_tasks:
+                        st.write(f"• {task.description} ({task.category}) - Due: {task.deadline}")
+                
+            except Exception as e:
+                st.error(f"❌ Error generating recommendations: {str(e)}")
+    
+    # Bulk recommendations section
+    st.markdown("---")
+    st.subheader("📊 Bulk Recommendations")
+    
+    if st.button("🎯 Generate Recommendations for All Students"):
+        try:
+            engine = TaskRecommendationEngine()
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            all_recommendations = {}
+            
+            for i, student in enumerate(students):
+                status_text.text(f"Generating recommendations for {student.name}...")
+                recommendations = engine.suggest_tasks_for_student(student.id)
+                all_recommendations[student.name] = recommendations
+                progress_bar.progress((i + 1) / len(students))
+            
+            status_text.text("Complete!")
+            
+            # Display summary
+            st.subheader("📈 Recommendations Summary")
+            
+            summary_data = []
+            for student_name, recs in all_recommendations.items():
+                if "error" not in recs:
+                    summary_data.append({
+                        "Student": student_name,
+                        "Total Recommendations": recs['total_suggestions'],
+                        "High Priority": len([r for r in recs['recommendations'] if r['priority'] == 'high']),
+                        "Medium Priority": len([r for r in recs['recommendations'] if r['priority'] == 'medium']),
+                        "Keywords Found": len(recs.get('keywords_found', []))
+                    })
+            
+            if summary_data:
+                summary_df = pd.DataFrame(summary_data)
+                st.dataframe(summary_df, use_container_width=True)
+            
+        except Exception as e:
+            st.error(f"❌ Error generating bulk recommendations: {str(e)}")
+
 def show_dashboard():
     st.header('🎯 Educational Task Management Dashboard')
     st.write('Welcome to the Educational Task Management System! This platform helps you manage and track educational tasks for students and staff.')
@@ -394,6 +632,8 @@ elif page == 'Task Management':
         st.dataframe(task_df, use_container_width=True)
 elif page == 'Daily Task Feed':
     show_daily_task_feed()
+elif page == 'Task Recommendations':
+    show_task_recommendations()
 elif page == 'Progress Tracking':
     track_progress()
 elif page == 'Reports':

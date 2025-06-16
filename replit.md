@@ -39,6 +39,14 @@ A comprehensive Streamlit-based educational task management system designed for 
    - Staff-specific task summaries
    - Console and web-based output formats
 
+4. **Task Recommendation Engine** (`task_recommender.py`)
+   - AI-powered task suggestions based on IEP goals and student needs
+   - Rule-based keyword matching system with comprehensive dictionaries
+   - Staff expertise matching for optimal task assignment
+   - Priority-based recommendations (high/medium priority)
+   - ARD preparation task generation
+   - Bulk recommendation processing for multiple students
+
 ### Database Schema
 - **Students**: id, name, goals, needs, ard_date
 - **Staff**: id, name, expertise
@@ -48,10 +56,25 @@ A comprehensive Streamlit-based educational task management system designed for 
 - **Task Frequency Support**: Daily, Once a Month, Every 9 Weeks, Once a Year, Once
 - **ARD Integration**: Automatic countdown and task generation for ARD preparation
 - **Daily Feed Generation**: Automated morning task lists for each staff member
+- **AI Task Recommendations**: Intelligent task suggestions based on IEP goals and student needs
+- **Staff Expertise Matching**: Automatic assignment of tasks to appropriately skilled staff
+- **One-Click Task Creation**: Direct creation of recommended tasks with optimal settings
+- **Bulk Processing**: Generate recommendations for all students simultaneously
 - **Progress Tracking**: Completion rates and analytics
 - **Responsive UI**: Professional interface with icons and organized layout
 
 ## Recent Changes
+
+### 2025-01-16: Task Recommendation Engine Implementation
+- Built comprehensive AI-powered task recommendation system
+- Added rule-based matching engine for IEP goals to task suggestions
+- Implemented keyword extraction and intelligent task mapping
+- Created comprehensive goal-to-task and service-to-task dictionaries
+- Added staff expertise matching for optimal task assignment
+- Integrated one-click task creation from recommendations
+- Built bulk recommendation functionality for all students
+- Added priority-based task categorization (high/medium priority)
+- Implemented ARD-proximity task generation (preparation tasks)
 
 ### 2025-01-16: Daily Task Feed Implementation
 - Added comprehensive daily task feed generator module
