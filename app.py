@@ -7,6 +7,7 @@ from sqlalchemy import func
 from sqlalchemy import Integer
 from daily_task_feed import DailyTaskFeedGenerator
 from task_recommender import TaskRecommendationEngine
+from scheduling_engine import TaskSchedulingEngine
 
 # Page configuration
 st.set_page_config(
@@ -36,7 +37,7 @@ with st.sidebar:
     st.markdown('---')
     page = st.selectbox(
         'Choose a section',
-        ['Dashboard', 'Daily Task Feed', 'Task Recommendations', 'Student Management', 'Staff Management', 'Task Management', 'Progress Tracking', 'Reports'],
+        ['Dashboard', 'Daily Task Feed', 'Task Recommendations', 'Smart Scheduling', 'Student Management', 'Staff Management', 'Task Management', 'Progress Tracking', 'Reports'],
         index=0
     )
     st.markdown('---')
@@ -634,6 +635,8 @@ elif page == 'Daily Task Feed':
     show_daily_task_feed()
 elif page == 'Task Recommendations':
     show_task_recommendations()
+elif page == 'Smart Scheduling':
+    show_smart_scheduling()
 elif page == 'Progress Tracking':
     track_progress()
 elif page == 'Reports':
