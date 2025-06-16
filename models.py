@@ -1,10 +1,12 @@
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, Date, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, Date, ForeignKey, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import os
 
 # Get database URL from environment
 DATABASE_URL = os.getenv('DATABASE_URL')
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is required")
 
 # Create database engine
 engine = create_engine(DATABASE_URL)
@@ -19,6 +21,7 @@ class Student(Base):
     name = Column(String, nullable=False)
     goals = Column(String, nullable=False)  # Comma-separated string
     needs = Column(String, nullable=False)  # Comma-separated string
+    ard_date = Column(Date)  # ARD (Admission, Review, and Dismissal) date
     tasks = relationship("Task", back_populates="student")
 
 class Staff(Base):
@@ -39,6 +42,8 @@ class Task(Base):
     student_id = Column(Integer, ForeignKey('students.id'))
     deadline = Column(Date, nullable=False)
     completed = Column(Boolean, default=False)
+    frequency = Column(String, default='Once')  # Daily, Every 9 Weeks, Once a Month, Once a Year, Once
+    last_completed = Column(Date)  # Track when task was last completed
     
     staff_member = relationship("Staff", back_populates="tasks")
     student = relationship("Student", back_populates="tasks")

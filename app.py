@@ -5,6 +5,7 @@ import plotly.express as px
 from models import Student, Staff, Task, get_db
 from sqlalchemy import func
 from sqlalchemy import Integer
+from daily_task_feed import DailyTaskFeedGenerator
 
 # Page configuration
 st.set_page_config(
@@ -34,7 +35,7 @@ with st.sidebar:
     st.markdown('---')
     page = st.selectbox(
         'Choose a section',
-        ['Dashboard', 'Student Management', 'Staff Management', 'Task Management', 'Progress Tracking', 'Reports'],
+        ['Dashboard', 'Daily Task Feed', 'Student Management', 'Staff Management', 'Task Management', 'Progress Tracking', 'Reports'],
         index=0
     )
     st.markdown('---')
