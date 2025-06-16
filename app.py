@@ -572,6 +572,178 @@ def show_task_recommendations():
         except Exception as e:
             st.error(f"❌ Error generating bulk recommendations: {str(e)}")
 
+def show_smart_scheduling():
+    st.header('📅 Smart Scheduling')
+    st.subheader('Intelligent Task Due Date Calculator')
+    
+    scheduling_engine = TaskSchedulingEngine()
+    
+    # Display grading periods
+    st.markdown("---")
+    st.subheader('🗓️ Academic Calendar')
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Grading Periods:**")
+        for period in scheduling_engine.grading_periods:
+            st.write(f"Period {period['period']}: {period['start_date']} to {period['end_date']}")
+    
+    with col2:
+        st.markdown("**Scheduling Rules:**")
+        st.write("• **Daily**: Due today")
+        st.write("• **Monthly**: 1st of each month")
+        st.write("• **Every 9 Weeks**: End of grading period")
+        st.write("• **Once a Year**: 3 weeks before ARD")
+    
+    # Task scheduling overview
+    st.markdown("---")
+    st.subheader('📊 Task Scheduling Overview')
+    
+    # Calculate all due dates
+    all_calculations = scheduling_engine.calculate_all_task_due_dates()
+    
+    if all_calculations:
+        # Summary metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        today = datetime.now().date()
+        overdue_count = len([c for c in all_calculations if c['due_date'] and c['due_date'] < today])
+        urgent_count = len([c for c in all_calculations if c['due_date'] and 0 <= (c['due_date'] - today).days <= 3])
+        soon_count = len([c for c in all_calculations if c['due_date'] and 4 <= (c['due_date'] - today).days <= 7])
+        
+        with col1:
+            st.metric("Total Tasks", len(all_calculations))
+        with col2:
+            st.metric("Overdue", overdue_count)
+        with col3:
+            st.metric("Due in 1-3 Days", urgent_count)
+        with col4:
+            st.metric("Due in 4-7 Days", soon_count)
+        
+        # Tasks due soon section
+        st.markdown("---")
+        st.subheader('🚨 Tasks Due Soon')
+        
+        due_soon = scheduling_engine.get_tasks_due_soon(7)
+        
+        if due_soon:
+            for task in due_soon:
+                urgency_level = "🔴 URGENT" if task['urgency_days'] <= 3 else "🟡 SOON"
+                
+                with st.container():
+                    col1, col2, col3 = st.columns([3, 1, 1])
+                    
+                    with col1:
+                        st.write(f"**{task['task_name']}** ({task['student_name']})")
+                        st.caption(f"Reason: {task['reason']}")
+                    
+                    with col2:
+                        st.write(f"Due: {task['due_date']}")
+                        st.write(f"{urgency_level}")
+                    
+                    with col3:
+                        if task['urgency_days'] >= 0:
+                            st.write(f"In {task['urgency_days']} days")
+                        else:
+                            st.write(f"{abs(task['urgency_days'])} days ago")
+                
+                st.markdown("---")
+        else:
+            st.info("✅ No tasks due in the next 7 days.")
+        
+        # Detailed scheduling report
+        st.markdown("---")
+        st.subheader('📋 Detailed Scheduling Report')
+        
+        # Student filter
+        students = db.query(Student).all()
+        student_options = ['All Students'] + [s.name for s in students]
+        selected_student = st.selectbox('Filter by student:', student_options)
+        
+        if st.button('📄 Generate Report'):
+            if selected_student == 'All Students':
+                report = scheduling_engine.generate_scheduling_report()
+            else:
+                student_obj = db.query(Student).filter(Student.name == selected_student).first()
+                if student_obj:
+                    report = scheduling_engine.generate_scheduling_report(student_obj.id)
+                else:
+                    report = "Student not found."
+            
+            st.text_area("Scheduling Report", report, height=400)
+        
+        # Deadline update functionality
+        st.markdown("---")
+        st.subheader('🔄 Update Task Deadlines')
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button('🔍 Preview Deadline Updates'):
+                update_result = scheduling_engine.update_task_deadlines(auto_update=False)
+                
+                if update_result['tasks']:
+                    st.write(f"**{update_result['updated_count']} tasks need deadline updates:**")
+                    
+                    for task in update_result['tasks']:
+                        if task.get('needs_update'):
+                            st.write(f"• **{task['task_name']}**")
+                            st.write(f"  Current: {task['current_deadline']}")
+                            st.write(f"  Suggested: {task['suggested_deadline']}")
+                            st.write(f"  Reason: {task['reason']}")
+                            st.write("")
+                else:
+                    st.success("✅ All task deadlines are up to date.")
+        
+        with col2:
+            if st.button('⚡ Auto-Update All Deadlines', type='primary'):
+                update_result = scheduling_engine.update_task_deadlines(auto_update=True)
+                
+                if update_result['updated_count'] > 0:
+                    st.success(f"✅ Updated {update_result['updated_count']} task deadlines.")
+                    
+                    for task in update_result['tasks']:
+                        st.write(f"• {task['task_name']}: {task['old_deadline']} → {task['new_deadline']}")
+                    
+                    st.rerun()
+                else:
+                    st.info("✅ All task deadlines were already up to date.")
+        
+        # Frequency distribution chart
+        st.markdown("---")
+        st.subheader('📈 Task Frequency Distribution')
+        
+        frequency_counts = {}
+        for calc in all_calculations:
+            freq = calc['frequency'] or 'Once'
+            frequency_counts[freq] = frequency_counts.get(freq, 0) + 1
+        
+        if frequency_counts:
+            freq_df = pd.DataFrame(
+                list(frequency_counts.items()),
+                columns=['Frequency', 'Count']
+            )
+            
+            fig = px.pie(freq_df, values='Count', names='Frequency', 
+                        title='Task Distribution by Frequency')
+            st.plotly_chart(fig, use_container_width=True)
+    
+    else:
+        st.info("No tasks found for scheduling analysis.")
+    
+    # Scheduling configuration
+    st.markdown("---")
+    st.subheader('⚙️ Scheduling Configuration')
+    
+    with st.expander("Advanced Settings"):
+        st.write("**Current Settings:**")
+        st.write(f"• School Year: {scheduling_engine.school_year_start} to {scheduling_engine.school_year_end}")
+        st.write(f"• Monthly tasks due on: {scheduling_engine.monthly_day_preference}{'st' if scheduling_engine.monthly_day_preference == 1 else 'th'} of month")
+        st.write(f"• ARD buffer: {scheduling_engine.ard_buffer_weeks} weeks before ARD date")
+        
+        st.info("Scheduling settings can be customized in the scheduling_engine.py file.")
+
 def show_dashboard():
     st.header('🎯 Educational Task Management Dashboard')
     st.write('Welcome to the Educational Task Management System! This platform helps you manage and track educational tasks for students and staff.')
