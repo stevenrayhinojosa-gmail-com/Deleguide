@@ -68,6 +68,8 @@ def add_student():
                 'Specific Needs',
                 ['Reading Comprehension', 'Math Support', 'Behavioral Support', 'Fine Motor Skills']
             )
+        
+        ard_date = st.date_input('ARD Date (Optional)', value=None)
 
         submitted = st.form_submit_button('Add Student')
         if submitted:
@@ -75,7 +77,8 @@ def add_student():
                 new_student = Student(
                     name=name,
                     goals=','.join(goals),
-                    needs=','.join(needs)
+                    needs=','.join(needs),
+                    ard_date=ard_date
                 )
                 db.add(new_student)
                 db.commit()
@@ -137,6 +140,11 @@ def create_task():
                 min_value=datetime.now().date(),
                 max_value=datetime.now().date() + timedelta(days=365)
             )
+        
+        frequency = st.selectbox(
+            'Task Frequency',
+            ['Once', 'Daily', 'Once a Month', 'Every 9 Weeks', 'Once a Year']
+        )
 
         submitted = st.form_submit_button('Create Task')
         if submitted:
@@ -150,6 +158,7 @@ def create_task():
                     staff_id=staff_obj.id,
                     student_id=student_obj.id,
                     deadline=deadline,
+                    frequency=frequency,
                     completed=False
                 )
                 db.add(new_task)
@@ -232,6 +241,98 @@ def generate_reports():
     st.subheader('👨‍🎓 Student Task Progress')
     st.dataframe(student_progress, use_container_width=True)
 
+def show_daily_task_feed():
+    st.header('📅 Daily Task Feed')
+    st.subheader('Tasks Due Today for All Staff')
+    
+    generator = DailyTaskFeedGenerator()
+    
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button('🔄 Refresh Feed', type='primary'):
+            st.rerun()
+    
+    with col1:
+        st.write(f"**Today's Date:** {datetime.now().strftime('%Y-%m-%d')}")
+    
+    try:
+        # Generate the daily feed
+        feed_content = generator.generate_daily_feed()
+        
+        if "No tasks due today" in feed_content:
+            st.info("✅ No tasks due today for any staff members.")
+        else:
+            # Display the feed content in a formatted way
+            st.markdown("---")
+            
+            # Get all staff members and their tasks
+            staff_members = db.query(Staff).all()
+            
+            if not staff_members:
+                st.warning("⚠️ No staff members found. Please add staff members first.")
+                return
+            
+            found_tasks = False
+            
+            for staff_member in staff_members:
+                today_tasks = generator.get_today_tasks(staff_member.id)
+                
+                if today_tasks:
+                    found_tasks = True
+                    st.markdown(f"### 🧑‍🏫 {staff_member.name}")
+                    
+                    for task in today_tasks:
+                        student_name = task.student.name if task.student else "Unknown Student"
+                        
+                        # Create task card
+                        with st.container():
+                            col1, col2, col3 = st.columns([3, 1, 1])
+                            
+                            with col1:
+                                st.markdown(f"**{student_name}** → {task.description}")
+                                if task.frequency and task.frequency.lower() != 'once':
+                                    st.caption(f"Frequency: {task.frequency}")
+                            
+                            with col2:
+                                if task.student and task.student.ard_date:
+                                    days_until_ard = generator.get_days_until_ard(task.student.id)
+                                    if days_until_ard is not None and days_until_ard <= 21:
+                                        st.markdown(f"🔔 **ARD in {days_until_ard} days**")
+                            
+                            with col3:
+                                st.caption(f"Category: {task.category}")
+                        
+                        st.markdown("---")
+            
+            if not found_tasks:
+                st.info("✅ No tasks due today for any staff members.")
+    
+    except Exception as e:
+        st.error(f"❌ Error generating daily task feed: {str(e)}")
+    
+    # Staff-specific task summary section
+    st.markdown("---")
+    st.subheader('📋 Staff-Specific Task Summary')
+    
+    staff_list = db.query(Staff).all()
+    if staff_list:
+        selected_staff = st.selectbox(
+            'Select staff member to view their tasks:',
+            [s.name for s in staff_list],
+            key='staff_selector'
+        )
+        
+        if selected_staff:
+            staff_obj = db.query(Staff).filter(Staff.name == selected_staff).first()
+            if staff_obj:
+                try:
+                    summary = generator.get_staff_task_summary(staff_obj.id)
+                    st.markdown("```")
+                    st.text(summary)
+                    st.markdown("```")
+                except Exception as e:
+                    st.error(f"❌ Error generating staff summary: {str(e)}")
+
 def show_dashboard():
     st.header('🎯 Educational Task Management Dashboard')
     st.write('Welcome to the Educational Task Management System! This platform helps you manage and track educational tasks for students and staff.')
@@ -291,6 +392,8 @@ elif page == 'Task Management':
             columns=['description', 'category', 'staff_assigned', 'student', 'deadline', 'completed']
         )
         st.dataframe(task_df, use_container_width=True)
+elif page == 'Daily Task Feed':
+    show_daily_task_feed()
 elif page == 'Progress Tracking':
     track_progress()
 elif page == 'Reports':

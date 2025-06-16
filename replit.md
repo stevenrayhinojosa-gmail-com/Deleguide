@@ -1,97 +1,106 @@
 # Educational Task Management System
 
 ## Overview
+A comprehensive Streamlit-based educational task management system designed for Special Education (SPED) programs. The system streamlines task delegation and tracking between students and staff, with enhanced features for daily task feeds, ARD date tracking, and automated task scheduling.
 
-This is a Streamlit-based educational task management system designed to streamline task delegation and tracking between students and staff in educational institutions. The application provides a web interface for managing student profiles, staff assignments, and task progress tracking with real-time analytics and reporting capabilities.
+### Purpose
+- Manage student profiles with learning goals, needs, and ARD dates
+- Track staff expertise and availability
+- Create and assign tasks with various frequencies (Daily, Weekly, Monthly, etc.)
+- Generate daily task feeds for staff members
+- Monitor task completion and progress
+- Generate comprehensive reports and analytics
 
-## System Architecture
+### Current State
+- Fully functional with PostgreSQL database integration
+- Enhanced UI with Daily Task Feed functionality
+- Supporting ARD date tracking and countdown notifications
+- Task frequency management (Daily, Once a Month, Every 9 Weeks, Once a Year)
+- Real-time dashboard with analytics and visualizations
 
-### Frontend Architecture
-- **Framework**: Streamlit for web-based user interface
-- **Styling**: Custom CSS for enhanced UI/UX
-- **Visualization**: Plotly Express for interactive charts and dashboards
-- **Layout**: Wide layout with sidebar navigation for different sections
+## Project Architecture
 
-### Backend Architecture
-- **Language**: Python 3.11
-- **ORM**: SQLAlchemy for database operations
-- **Session Management**: SQLAlchemy SessionLocal for database connections
-- **Data Processing**: Pandas for data manipulation and analysis
+### Core Components
+1. **Streamlit Frontend** (`app.py`)
+   - Multi-page navigation (Dashboard, Daily Task Feed, Student/Staff/Task Management, Progress Tracking, Reports)
+   - Interactive forms for data entry
+   - Real-time data visualization with Plotly
+   - Responsive design with custom CSS
 
-### Database Architecture
-- **Database**: PostgreSQL (configurable via environment variables)
-- **Tables**: 
-  - `students` - Student profiles with goals and needs
-  - `staff` - Staff members with expertise areas
-  - `tasks` - Task assignments linking students and staff
-- **Relationships**: Foreign key relationships between tasks, students, and staff
+2. **Database Models** (`models.py`)
+   - SQLAlchemy ORM with PostgreSQL backend
+   - Three main entities: Students, Staff, Tasks
+   - Relationship mapping between entities
+   - Enhanced with ARD dates and task frequency tracking
 
-## Key Components
+3. **Daily Task Feed Generator** (`daily_task_feed.py`)
+   - Automated task scheduling based on frequency patterns
+   - ARD date proximity notifications (21-day alert window)
+   - Staff-specific task summaries
+   - Console and web-based output formats
 
-### 1. Data Models (`models.py`)
-- **Student Model**: Stores student information, educational goals, and specific needs
-- **Staff Model**: Manages staff profiles with expertise areas
-- **Task Model**: Handles task assignments with completion tracking and deadlines
-- **Database Session**: Centralized database connection management
+### Database Schema
+- **Students**: id, name, goals, needs, ard_date
+- **Staff**: id, name, expertise
+- **Tasks**: id, description, category, staff_id, student_id, deadline, completed, frequency, last_completed
 
-### 2. Main Application (`app.py`)
-- **Navigation System**: Sidebar-based page routing
-- **Dashboard**: Quick stats and overview metrics
-- **Section Management**: Modular approach for different application areas
-- **Real-time Metrics**: Live counting of students and staff
+### Key Features
+- **Task Frequency Support**: Daily, Once a Month, Every 9 Weeks, Once a Year, Once
+- **ARD Integration**: Automatic countdown and task generation for ARD preparation
+- **Daily Feed Generation**: Automated morning task lists for each staff member
+- **Progress Tracking**: Completion rates and analytics
+- **Responsive UI**: Professional interface with icons and organized layout
 
-### 3. Application Sections
-- **Dashboard**: System overview and key metrics
-- **Student Management**: CRUD operations for student profiles
-- **Staff Management**: Staff profile and expertise management
-- **Task Management**: Task creation, assignment, and tracking
-- **Progress Tracking**: Real-time progress monitoring
-- **Reports**: Analytics and performance reporting
+## Recent Changes
 
-## Data Flow
+### 2025-01-16: Daily Task Feed Implementation
+- Added comprehensive daily task feed generator module
+- Enhanced database schema with frequency and ARD date fields
+- Implemented ARD countdown notifications (21-day window)
+- Added staff-specific task summary functionality
+- Integrated daily feed into main Streamlit navigation
+- Updated forms to support ARD dates and task frequencies
 
-1. **Student Registration**: Students are registered with their educational goals and specific needs
-2. **Staff Assignment**: Staff members are added with their areas of expertise
-3. **Task Creation**: Tasks are created and assigned to appropriate staff based on student needs
-4. **Progress Tracking**: Task completion status is monitored and updated
-5. **Reporting**: Analytics are generated based on task completion and student progress
+### Architecture Decisions
+- **PostgreSQL**: Chosen for robust data persistence and relationship management
+- **SQLAlchemy ORM**: Provides clean database abstraction and migration support
+- **Streamlit**: Rapid development framework with built-in UI components
+- **Frequency-Based Scheduling**: Supports educational calendar patterns (9-week cycles, monthly reviews)
 
-## External Dependencies
+## Technical Details
 
-### Core Dependencies
-- **Streamlit**: Web application framework for the user interface
-- **SQLAlchemy**: ORM for database operations and model definitions
-- **Pandas**: Data manipulation and analysis
-- **Plotly**: Interactive visualization and charting
-- **psycopg2-binary**: PostgreSQL database adapter
+### Dependencies
+- streamlit: Web application framework
+- pandas: Data manipulation and analysis
+- plotly: Interactive data visualizations
+- sqlalchemy: Database ORM
+- psycopg2-binary: PostgreSQL adapter
 
-### Database
-- **PostgreSQL**: Primary database for persistent storage
-- **Environment Configuration**: Database connection managed via environment variables
+### Configuration
+- Server runs on port 5000 with 0.0.0.0 binding for deployment
+- Database connection via DATABASE_URL environment variable
+- Streamlit config in `.streamlit/config.toml`
 
-## Deployment Strategy
-
-### Replit Configuration
-- **Runtime**: Python 3.11 with Nix package management
-- **Port Configuration**: Streamlit runs on port 5000, exposed as port 80
-- **Auto-scaling**: Configured for autoscale deployment target
-- **Workflow**: Automated package installation and application startup
-
-### Environment Setup
-- **Database URL**: Configurable PostgreSQL connection string
-- **Debug Mode**: Toggleable debug settings for development
-- **Security**: Environment variables for sensitive configuration
-
-### Development Workflow
-- **Package Management**: Automatic dependency installation via pyproject.toml
-- **Testing**: Unit tests included for model validation
-- **Version Control**: Git-based with comprehensive .gitignore
-
-## Changelog
-
-Changelog:
-- June 16, 2025. Initial setup
+### Database Migrations
+- Schema changes applied via SQL ALTER statements
+- Added: students.ard_date, tasks.frequency, tasks.last_completed
 
 ## User Preferences
+- Prefers simple, everyday language explanations
+- Values comprehensive functionality over minimal features
+- Interested in educational workflow automation
+- Focuses on practical SPED program management needs
 
-Preferred communication style: Simple, everyday language.
+## Future Enhancement Opportunities
+- Email/SMS notifications for task reminders
+- Advanced task assignment algorithms based on staff expertise matching
+- Calendar integration for better scheduling
+- Custom report generation with export capabilities
+- Mobile-responsive design improvements
+- Bulk task import/export functionality
+
+## Deployment Notes
+- Application ready for Replit deployment
+- All essential files present (README.md, .gitignore, LICENSE, tests)
+- Environment configured for production use
+- Database schema current and stable
