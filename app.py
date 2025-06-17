@@ -9,6 +9,7 @@ from daily_task_feed import DailyTaskFeedGenerator
 from task_recommender import TaskRecommendationEngine
 from scheduling_engine import TaskSchedulingEngine
 from recurring_task_generator import RecurringTaskGenerator
+from teacher_interface import TeacherTaskInterface
 
 # Page configuration
 st.set_page_config(
@@ -38,7 +39,7 @@ with st.sidebar:
     st.markdown('---')
     page = st.selectbox(
         'Choose a section',
-        ['Dashboard', 'Daily Task Feed', 'Task Recommendations', 'Smart Scheduling', 'Recurring Tasks', 'Student Management', 'Staff Management', 'Task Management', 'Progress Tracking', 'Reports'],
+        ['Dashboard', 'Daily Task Feed', 'Teacher Interface', 'Task Recommendations', 'Smart Scheduling', 'Recurring Tasks', 'Student Management', 'Staff Management', 'Task Management', 'Progress Tracking', 'Reports'],
         index=0
     )
     st.markdown('---')
@@ -1003,6 +1004,245 @@ def show_recurring_tasks():
         report = recurring_generator.generate_summary_report(test_date)
         st.text_area("Recurring Task Report", report, height=400)
 
+def show_teacher_interface():
+    st.header('👩‍🏫 Teacher Task Interface')
+    st.subheader('Daily Task Management & Completion')
+    
+    teacher_interface = TeacherTaskInterface()
+    
+    # Teacher selection
+    st.markdown("---")
+    st.subheader('👤 Select Teacher')
+    
+    teachers = teacher_interface.get_all_teachers()
+    if not teachers:
+        st.error("No teachers found in the system. Please add teachers first.")
+        return
+    
+    teacher_options = [f"{t.name} ({t.expertise})" for t in teachers]
+    selected_teacher_str = st.selectbox('Choose teacher:', teacher_options)
+    
+    # Get selected teacher
+    selected_teacher_name = selected_teacher_str.split(' (')[0]
+    selected_teacher = next((t for t in teachers if t.name == selected_teacher_name), None)
+    
+    if not selected_teacher:
+        st.error("Teacher not found")
+        return
+    
+    # Date selection
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        target_date = st.date_input('Task Date:', value=datetime.now().date())
+    
+    with col2:
+        if st.button('🔄 Refresh Tasks'):
+            st.rerun()
+    
+    # Display teacher dashboard
+    st.markdown("---")
+    st.subheader(f'📊 Dashboard for {selected_teacher.name}')
+    
+    summary = teacher_interface.get_task_summary(selected_teacher.id, target_date)
+    
+    # Summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Tasks", summary['total_tasks'])
+    with col2:
+        st.metric("Completed", summary['completed_tasks'], delta=f"{summary['completion_rate']:.1f}%")
+    with col3:
+        st.metric("Pending", summary['pending_tasks'])
+    with col4:
+        if summary['total_tasks'] > 0:
+            progress = summary['completed_tasks'] / summary['total_tasks']
+            st.progress(progress)
+            st.caption(f"{summary['completion_rate']:.1f}% Complete")
+    
+    # Category breakdown
+    if summary['categories']:
+        st.markdown("---")
+        st.subheader('📋 Tasks by Category')
+        
+        category_data = []
+        for category, stats in summary['categories'].items():
+            category_data.append({
+                'Category': category,
+                'Total': stats['total'],
+                'Completed': stats['completed'],
+                'Pending': stats['pending'],
+                'Progress': f"{(stats['completed']/stats['total']*100):.1f}%" if stats['total'] > 0 else "0%"
+            })
+        
+        if category_data:
+            category_df = pd.DataFrame(category_data)
+            st.dataframe(category_df, use_container_width=True)
+    
+    # Task management section
+    st.markdown("---")
+    st.subheader('✅ Task Management')
+    
+    # Get pending and completed tasks
+    pending_tasks = teacher_interface.get_pending_tasks(selected_teacher.id, target_date)
+    completed_tasks = teacher_interface.get_completed_tasks(selected_teacher.id, target_date)
+    
+    # Pending tasks section
+    if pending_tasks:
+        st.markdown("### ⏳ Pending Tasks")
+        
+        for i, task in enumerate(pending_tasks):
+            with st.expander(f"📝 {task['task_name']} - {task['student_name']}", expanded=False):
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    st.write(f"**Category:** {task['category']}")
+                    st.write(f"**Student:** {task['student_name']}")
+                    st.write(f"**Due Date:** {task['deadline']}")
+                    st.write(f"**Frequency:** {task['frequency']}")
+                
+                with col2:
+                    # Task completion form
+                    completion_note = st.text_area(
+                        'Completion Note (optional):',
+                        key=f"note_{task['task_id']}",
+                        height=80,
+                        placeholder="e.g., 'Student was absent', 'Completed during small group'"
+                    )
+                    
+                    col_a, col_b = st.columns(2)
+                    
+                    with col_a:
+                        if st.button('✅ Complete', key=f"complete_{task['task_id']}", type='primary'):
+                            success = teacher_interface.mark_task_complete(
+                                task['task_id'],
+                                completion_note=completion_note if completion_note else None,
+                                completed_by=selected_teacher.name
+                            )
+                            
+                            if success:
+                                st.success("Task completed!")
+                                st.rerun()
+                            else:
+                                st.error("Failed to complete task")
+                    
+                    with col_b:
+                        if completion_note and st.button('📝 Add Note', key=f"note_only_{task['task_id']}"):
+                            success = teacher_interface.add_task_note(task['task_id'], completion_note)
+                            
+                            if success:
+                                st.success("Note added!")
+                                st.rerun()
+                            else:
+                                st.error("Failed to add note")
+    else:
+        st.success("🎉 All tasks completed for this date!")
+    
+    # Completed tasks section
+    if completed_tasks:
+        st.markdown("---")
+        st.markdown("### ✅ Completed Tasks")
+        
+        for task in completed_tasks:
+            with st.expander(f"✅ {task['task_name']} - {task['student_name']}", expanded=False):
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    st.write(f"**Category:** {task['category']}")
+                    st.write(f"**Student:** {task['student_name']}")
+                    if task['completed_at']:
+                        st.write(f"**Completed At:** {task['completed_at'].strftime('%Y-%m-%d %H:%M')}")
+                    if task['completion_note']:
+                        st.write(f"**Note:** {task['completion_note']}")
+                
+                with col2:
+                    if st.button('↩️ Mark Incomplete', key=f"incomplete_{task['task_id']}"):
+                        success = teacher_interface.mark_task_incomplete(task['task_id'])
+                        
+                        if success:
+                            st.success("Task marked as incomplete!")
+                            st.rerun()
+                        else:
+                            st.error("Failed to mark task as incomplete")
+    
+    # Quick stats
+    st.markdown("---")
+    st.subheader('📈 Quick Statistics')
+    
+    if summary['total_tasks'] > 0:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Completion rate chart
+            completion_data = {
+                'Status': ['Completed', 'Pending'],
+                'Count': [summary['completed_tasks'], summary['pending_tasks']]
+            }
+            
+            if completion_data['Count'][0] > 0 or completion_data['Count'][1] > 0:
+                fig_pie = px.pie(
+                    values=completion_data['Count'],
+                    names=completion_data['Status'],
+                    title='Task Completion Status',
+                    color_discrete_map={'Completed': '#00CC96', 'Pending': '#FFA15A'}
+                )
+                st.plotly_chart(fig_pie, use_container_width=True)
+        
+        with col2:
+            # Category breakdown chart
+            if summary['categories']:
+                category_names = list(summary['categories'].keys())
+                category_counts = [summary['categories'][cat]['total'] for cat in category_names]
+                
+                fig_bar = px.bar(
+                    x=category_names,
+                    y=category_counts,
+                    title='Tasks by Category',
+                    labels={'x': 'Category', 'y': 'Number of Tasks'}
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
+    
+    # Export functionality
+    st.markdown("---")
+    st.subheader('📄 Export & Reports')
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button('📊 Generate Daily Report'):
+            dashboard_text = teacher_interface.display_teacher_dashboard(selected_teacher.id, target_date)
+            st.text_area('Daily Report', dashboard_text, height=300)
+    
+    with col2:
+        if summary['total_tasks'] > 0:
+            # Prepare task data for export
+            all_tasks = summary['tasks']
+            export_data = []
+            
+            for task in all_tasks:
+                export_data.append({
+                    'Task': task['task_name'],
+                    'Category': task['category'],
+                    'Student': task['student_name'],
+                    'Due Date': str(task['deadline']),
+                    'Completed': 'Yes' if task['completed'] else 'No',
+                    'Completed At': str(task['completed_at']) if task['completed_at'] else '',
+                    'Note': task['completion_note'] if task['completion_note'] else ''
+                })
+            
+            if export_data:
+                export_df = pd.DataFrame(export_data)
+                csv = export_df.to_csv(index=False)
+                
+                st.download_button(
+                    label='📥 Download CSV Report',
+                    data=csv,
+                    file_name=f'{selected_teacher.name.replace(" ", "_")}_tasks_{target_date}.csv',
+                    mime='text/csv'
+                )
+
 def show_dashboard():
     st.header('🎯 Educational Task Management Dashboard')
     st.write('Welcome to the Educational Task Management System! This platform helps you manage and track educational tasks for students and staff.')
@@ -1064,6 +1304,8 @@ elif page == 'Task Management':
         st.dataframe(task_df, use_container_width=True)
 elif page == 'Daily Task Feed':
     show_daily_task_feed()
+elif page == 'Teacher Interface':
+    show_teacher_interface()
 elif page == 'Task Recommendations':
     show_task_recommendations()
 elif page == 'Smart Scheduling':
