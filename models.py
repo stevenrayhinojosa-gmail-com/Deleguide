@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, Date, ForeignKey, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, Date, ForeignKey, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import os
@@ -44,6 +44,8 @@ class Task(Base):
     completed = Column(Boolean, default=False)
     frequency = Column(String, default='Once')  # Daily, Every 9 Weeks, Once a Month, Once a Year, Once
     last_completed = Column(Date)  # Track when task was last completed
+    completion_note = Column(Text)  # Optional note when task is completed
+    completed_at = Column(DateTime)  # Timestamp when task was completed
     
     staff_member = relationship("Staff", back_populates="tasks")
     student = relationship("Student", back_populates="tasks")
