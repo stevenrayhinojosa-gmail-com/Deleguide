@@ -98,14 +98,20 @@ class DailyTaskFeedGenerator:
                     feed_output.append("")
                     
                     for task in today_tasks:
-                        student_name = task.student.name if task.student else "Unknown Student"
-                        task_line = f"{student_name} → {task.description}"
-                        
-                        # Add ARD countdown if applicable
-                        if task.student and task.student.ard_date:
-                            days_until_ard = self.get_days_until_ard(task.student.id)
-                            if days_until_ard is not None and days_until_ard <= 21:
-                                task_line += f" (ARD in {days_until_ard} days)"
+                        # Handle both Task objects and dictionaries
+                        if isinstance(task, dict):
+                            student_name = task.get('student_name', 'Unknown Student')
+                            task_description = task.get('description', 'Unknown Task')
+                            task_line = f"{student_name} → {task_description}"
+                        else:
+                            student_name = task.student.name if task.student else "Unknown Student"
+                            task_line = f"{student_name} → {task.description}"
+                            
+                            # Add ARD countdown if applicable
+                            if task.student and task.student.ard_date:
+                                days_until_ard = self.get_days_until_ard(task.student.id)
+                                if days_until_ard is not None and days_until_ard <= 21:
+                                    task_line += f" (ARD in {days_until_ard} days)"
                         
                         feed_output.append(task_line)
                     

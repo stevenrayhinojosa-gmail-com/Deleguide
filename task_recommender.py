@@ -238,10 +238,20 @@ class TaskRecommendationEngine:
             # Sort by priority (high first, then medium)
             unique_recommendations.sort(key=lambda x: (x["priority"] != "high", x["task_name"]))
             
+            # Get staff suggestions for the recommended tasks
+            staff_suggestions = []
+            for rec in unique_recommendations:
+                category_staff = self.get_staff_recommendations(rec["category"])
+                staff_suggestions.extend(category_staff)
+            
+            # Remove duplicates from staff suggestions
+            staff_suggestions = list(set(staff_suggestions))
+            
             return {
                 "student_name": student.name,
                 "student_id": student_id,
                 "recommendations": unique_recommendations,
+                "staff_suggestions": staff_suggestions,
                 "total_suggestions": len(unique_recommendations),
                 "ard_date": student.ard_date,
                 "keywords_found": all_keywords

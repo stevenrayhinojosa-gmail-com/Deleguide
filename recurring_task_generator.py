@@ -305,9 +305,17 @@ class RecurringTaskGenerator:
             
             session.commit()
             
+            # Add summary information
+            results['success'] = True
+            results['tasks_created'] = len(results['generated_tasks'])
+            results['summary'] = f"{len(results['generated_tasks'])} tasks generated, {len(results['skipped_tasks'])} skipped, {len(results['exceptions'])} exceptions"
+            
         except Exception as e:
             session.rollback()
             results['errors'].append(f"Database error: {str(e)}")
+            results['success'] = False
+            results['tasks_created'] = 0
+            results['summary'] = f"Failed: {str(e)}"
         finally:
             session.close()
         
