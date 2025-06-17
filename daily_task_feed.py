@@ -13,8 +13,8 @@ class DailyTaskFeedGenerator:
         today = date.today()
         
         try:
-            # Get all tasks assigned to this staff member
-            tasks = session.query(Task).filter(
+            # Get all tasks assigned to this staff member with student data
+            tasks = session.query(Task).join(Student, Task.student_id == Student.id, isouter=True).filter(
                 Task.staff_id == staff_id,
                 Task.completed == False
             ).all()
@@ -23,7 +23,18 @@ class DailyTaskFeedGenerator:
             
             for task in tasks:
                 if self._is_task_due_today(task, today):
-                    today_tasks.append(task)
+                    # Create a dictionary with all needed data to avoid session issues
+                    task_data = {
+                        'id': task.id,
+                        'description': task.description,
+                        'category': task.category,
+                        'frequency': task.frequency,
+                        'deadline': task.deadline,
+                        'student_name': task.student.name if task.student else "Unknown Student",
+                        'student_id': task.student_id,
+                        'student_ard_date': task.student.ard_date if task.student else None
+                    }
+                    today_tasks.append(task_data)
             
             return today_tasks
             
@@ -98,13 +109,13 @@ class DailyTaskFeedGenerator:
                     feed_output.append("")
                     
                     for task in today_tasks:
-                        # Always treat as Task objects from SQLAlchemy
-                        student_name = task.student.name if task.student else "Unknown Student"
-                        task_line = f"{student_name} → {task.description}"
+                        # Handle task dictionaries from get_today_tasks
+                        student_name = task['student_name']
+                        task_line = f"{student_name} → {task['description']}"
                         
                         # Add ARD countdown if applicable
-                        if task.student and task.student.ard_date:
-                            days_until_ard = self.get_days_until_ard(task.student.id)
+                        if task['student_ard_date'] and task['student_id']:
+                            days_until_ard = self.get_days_until_ard(task['student_id'])
                             if days_until_ard is not None and days_until_ard <= 21:
                                 task_line += f" (ARD in {days_until_ard} days)"
                         
@@ -138,16 +149,16 @@ class DailyTaskFeedGenerator:
             
             if today_tasks:
                 for task in today_tasks:
-                    student_name = task.student.name if task.student else "Unknown Student"
-                    task_info = f"• {student_name}: {task.description}"
+                    student_name = task['student_name']
+                    task_info = f"• {student_name}: {task['description']}"
                     
                     # Add frequency info
-                    if task.frequency and task.frequency.lower() != 'once':
-                        task_info += f" ({task.frequency})"
+                    if task['frequency'] and task['frequency'].lower() != 'once':
+                        task_info += f" ({task['frequency']})"
                     
                     # Add ARD countdown if applicable
-                    if task.student and task.student.ard_date:
-                        days_until_ard = self.get_days_until_ard(task.student.id)
+                    if task['student_ard_date'] and task['student_id']:
+                        days_until_ard = self.get_days_until_ard(task['student_id'])
                         if days_until_ard is not None and days_until_ard <= 21:
                             task_info += f" - ARD in {days_until_ard} days"
                     
