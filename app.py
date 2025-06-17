@@ -198,53 +198,302 @@ def track_progress():
 
 def generate_reports():
     st.header('📈 Reports Dashboard')
+    
+    # Create tabs for different report types
+    tab1, tab2, tab3 = st.tabs(['📊 Overview Statistics', '📅 Weekly SPED Reports', '📋 Export Options'])
+    
+    with tab1:
+        tasks = db.query(Task).all()
+        if not tasks:
+            st.info('ℹ️ No task data available for reporting')
+            return
 
-    tasks = db.query(Task).all()
-    if not tasks:
-        st.info('ℹ️ No task data available for reporting')
-        return
+        # Task completion statistics
+        staff_stats = db.query(
+            Staff.name,
+            func.count(Task.id).label('total_tasks'),
+            func.sum(Task.completed.cast(Integer)).label('completed_tasks')
+        ).join(Task).group_by(Staff.name).all()
 
-    # Task completion statistics
-    staff_stats = db.query(
-        Staff.name,
-        func.count(Task.id).label('total_tasks'),
-        func.sum(Task.completed.cast(Integer)).label('completed_tasks')
-    ).join(Task).group_by(Staff.name).all()
+        completion_stats = pd.DataFrame(
+            [(s.name, s.total_tasks, s.completed_tasks) for s in staff_stats],
+            columns=['Staff', 'Total Tasks', 'Completed Tasks']
+        )
+        completion_stats['Completion Rate'] = (completion_stats['Completed Tasks'] / completion_stats['Total Tasks'] * 100).round(2)
 
-    completion_stats = pd.DataFrame(
-        [(s.name, s.total_tasks, s.completed_tasks) for s in staff_stats],
-        columns=['Staff', 'Total Tasks', 'Completed Tasks']
-    )
-    completion_stats['Completion Rate'] = (completion_stats['Completed Tasks'] / completion_stats['Total Tasks'] * 100).round(2)
+        # Display statistics
+        st.subheader('📊 Staff Performance Summary')
+        st.dataframe(completion_stats, use_container_width=True)
 
-    # Display statistics
-    st.subheader('📊 Staff Performance Summary')
-    st.dataframe(completion_stats, use_container_width=True)
+        # Create visualization
+        fig = px.bar(
+            completion_stats,
+            x='Staff',
+            y=['Total Tasks', 'Completed Tasks'],
+            title='Task Completion by Staff Member',
+            barmode='group'
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-    # Create visualization
-    fig = px.bar(
-        completion_stats,
-        x='Staff',
-        y=['Total Tasks', 'Completed Tasks'],
-        title='Task Completion by Staff Member',
-        barmode='group'
-    )
-    st.plotly_chart(fig, use_container_width=True)
+        # Student progress
+        student_stats = db.query(
+            Student.name,
+            func.count(Task.id).label('total_tasks'),
+            func.sum(Task.completed.cast(Integer)).label('completed_tasks')
+        ).join(Task).group_by(Student.name).all()
 
-    # Student progress
-    student_stats = db.query(
-        Student.name,
-        func.count(Task.id).label('total_tasks'),
-        func.sum(Task.completed.cast(Integer)).label('completed_tasks')
-    ).join(Task).group_by(Student.name).all()
-
-    student_progress = pd.DataFrame(
-        [(s.name, s.total_tasks, s.completed_tasks) for s in student_stats],
-        columns=['Student', 'Total Tasks', 'Completed Tasks']
-    )
-    student_progress['Completion Rate'] = (student_progress['Completed Tasks'] / student_progress['Total Tasks'] * 100).round(2)
-    st.subheader('👨‍🎓 Student Task Progress')
-    st.dataframe(student_progress, use_container_width=True)
+        student_progress = pd.DataFrame(
+            [(s.name, s.total_tasks, s.completed_tasks) for s in student_stats],
+            columns=['Student', 'Total Tasks', 'Completed Tasks']
+        )
+        student_progress['Completion Rate'] = (student_progress['Completed Tasks'] / student_progress['Total Tasks'] * 100).round(2)
+        st.subheader('👨‍🎓 Student Task Progress')
+        st.dataframe(student_progress, use_container_width=True)
+    
+    with tab2:
+        st.subheader('📅 Weekly SPED Task Reports')
+        st.markdown('Generate comprehensive weekly reports for SPED staff with task completion summaries, missed tasks, and IEP goal coverage analysis.')
+        
+        # Initialize report generator
+        report_generator = WeeklyReportGenerator()
+        
+        # Get all staff for dropdown
+        all_staff = db.query(Staff).all()
+        
+        if not all_staff:
+            st.warning('⚠️ No staff members found. Please add staff members first.')
+            return
+        
+        # Report configuration
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            report_type = st.selectbox(
+                'Report Type',
+                ['Individual Staff Report', 'Master Report (All Staff)'],
+                help='Choose between individual staff report or master report for all staff'
+            )
+            
+            if report_type == 'Individual Staff Report':
+                selected_staff = st.selectbox(
+                    'Select Staff Member',
+                    options=all_staff,
+                    format_func=lambda x: x.name,
+                    help='Choose the staff member for the report'
+                )
+        
+        with col2:
+            weeks_back = st.selectbox(
+                'Report Period',
+                options=[0, 1, 2, 3, 4],
+                format_func=lambda x: 'Current Week' if x == 0 else f'{x} Week(s) Ago',
+                help='Select which week to generate the report for'
+            )
+        
+        # Generate report button
+        if st.button('🔄 Generate Report', type='primary'):
+            with st.spinner('Generating weekly report...'):
+                try:
+                    # Get date range
+                    start_date, end_date = report_generator.get_date_range(weeks_back)
+                    
+                    if report_type == 'Individual Staff Report':
+                        # Generate individual report
+                        report_data = report_generator.generate_weekly_report(
+                            selected_staff.id, start_date, end_date
+                        )
+                        
+                        if 'error' in report_data:
+                            st.error(f'❌ Error generating report: {report_data["error"]}')
+                        else:
+                            # Display report
+                            st.success('✅ Report generated successfully!')
+                            
+                            # Report header
+                            st.markdown(f"## Weekly Report for {report_data['staff_name']}")
+                            st.markdown(f"**Period:** {report_data['report_period']['formatted_period']}")
+                            
+                            # Summary metrics
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.metric('Total Tasks', report_data['summary']['total_tasks'])
+                            with col2:
+                                st.metric('Completed', report_data['summary']['completed_tasks'])
+                            with col3:
+                                st.metric('Missed', report_data['summary']['missed_tasks'])
+                            with col4:
+                                st.metric('Completion Rate', f"{report_data['summary']['completion_rate']}%")
+                            
+                            # Completed tasks section
+                            if report_data['completed_tasks']:
+                                st.subheader('✅ Completed Tasks')
+                                completed_df = pd.DataFrame([
+                                    {
+                                        'Student': task['student_name'],
+                                        'Task': task['task_name'],
+                                        'Category': task['category'],
+                                        'Completed': task['completed_at'].strftime('%m/%d/%Y') if task['completed_at'] else 'Unknown',
+                                        'Notes': task['completion_note'] or 'No notes'
+                                    }
+                                    for task in report_data['completed_tasks']
+                                ])
+                                st.dataframe(completed_df, use_container_width=True)
+                            else:
+                                st.info('ℹ️ No completed tasks for this period')
+                            
+                            # Missed tasks section
+                            if report_data['missed_tasks']:
+                                st.subheader('❌ Missed Tasks')
+                                missed_df = pd.DataFrame([
+                                    {
+                                        'Student': task['student_name'],
+                                        'Task': task['task_name'],
+                                        'Category': task['category'],
+                                        'Due Date': task['deadline'].strftime('%m/%d/%Y')
+                                    }
+                                    for task in report_data['missed_tasks']
+                                ])
+                                st.dataframe(missed_df, use_container_width=True)
+                            else:
+                                st.success('🎉 No missed tasks!')
+                            
+                            # IEP Goal Coverage
+                            if report_data['goal_coverage']:
+                                st.subheader('🎯 IEP Goal Coverage')
+                                goal_df = pd.DataFrame([
+                                    {
+                                        'Student': student_name,
+                                        'Goals Addressed': ', '.join([goal.replace('_', ' ').title() for goal in coverage['goals_addressed']]),
+                                        'Tasks Completed': coverage['task_count']
+                                    }
+                                    for student_name, coverage in report_data['goal_coverage'].items()
+                                ])
+                                st.dataframe(goal_df, use_container_width=True)
+                            else:
+                                st.info('ℹ️ No goal coverage data available')
+                            
+                            # Store report data in session state for export
+                            st.session_state['current_report'] = report_data
+                    
+                    else:
+                        # Generate master report
+                        master_data = report_generator.generate_master_report(start_date, end_date)
+                        
+                        # Display master report
+                        st.success('✅ Master report generated successfully!')
+                        
+                        # Master report header
+                        st.markdown(f"## Master Weekly Report - All Staff")
+                        st.markdown(f"**Period:** {master_data['report_period']['formatted_period']}")
+                        
+                        # Master summary metrics
+                        summary = master_data['master_summary']
+                        col1, col2, col3, col4, col5 = st.columns(5)
+                        with col1:
+                            st.metric('Staff Members', summary['staff_count'])
+                        with col2:
+                            st.metric('Total Tasks', summary['total_tasks'])
+                        with col3:
+                            st.metric('Completed', summary['completed_tasks'])
+                        with col4:
+                            st.metric('Missed', summary['missed_tasks'])
+                        with col5:
+                            st.metric('Overall Rate', f"{summary['completion_rate']}%")
+                        
+                        # Staff breakdown
+                        st.subheader('👥 Staff Performance Breakdown')
+                        staff_summary_df = pd.DataFrame([
+                            {
+                                'Staff Member': staff_report['staff_name'],
+                                'Total Tasks': staff_report['summary']['total_tasks'],
+                                'Completed': staff_report['summary']['completed_tasks'],
+                                'Missed': staff_report['summary']['missed_tasks'],
+                                'Completion Rate': f"{staff_report['summary']['completion_rate']}%",
+                                'Students Served': staff_report['summary']['students_served']
+                            }
+                            for staff_report in master_data['staff_reports']
+                        ])
+                        st.dataframe(staff_summary_df, use_container_width=True)
+                        
+                        # Store master report data in session state for export
+                        st.session_state['current_report'] = master_data
+                        
+                except Exception as e:
+                    st.error(f'❌ Error generating report: {str(e)}')
+    
+    with tab3:
+        st.subheader('📋 Export Options')
+        st.markdown('Export your reports in various formats for sharing and record-keeping.')
+        
+        # Check if there's a current report to export
+        if 'current_report' in st.session_state:
+            report_data = st.session_state['current_report']
+            
+            # Export options
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown('**📊 Detailed Report Export**')
+                if st.button('📥 Download Detailed CSV'):
+                    try:
+                        with st.spinner('Preparing CSV export...'):
+                            csv_filename = report_generator.export_report_to_csv(report_data)
+                            st.success(f'✅ Report exported to: {csv_filename}')
+                            
+                            # Read the CSV file and offer download
+                            with open(csv_filename, 'r') as f:
+                                csv_content = f.read()
+                            
+                            st.download_button(
+                                label='💾 Download CSV File',
+                                data=csv_content,
+                                file_name=csv_filename,
+                                mime='text/csv'
+                            )
+                    except Exception as e:
+                        st.error(f'❌ Export error: {str(e)}')
+            
+            with col2:
+                st.markdown('**📈 Summary Export**')
+                if st.button('📥 Download Summary CSV'):
+                    try:
+                        with st.spinner('Preparing summary export...'):
+                            summary_filename = report_generator.export_summary_to_csv(report_data)
+                            st.success(f'✅ Summary exported to: {summary_filename}')
+                            
+                            # Read the summary CSV file and offer download
+                            with open(summary_filename, 'r') as f:
+                                summary_content = f.read()
+                            
+                            st.download_button(
+                                label='💾 Download Summary CSV',
+                                data=summary_content,
+                                file_name=summary_filename,
+                                mime='text/csv'
+                            )
+                    except Exception as e:
+                        st.error(f'❌ Export error: {str(e)}')
+            
+            # Text format export
+            st.markdown('**📄 Text Format Export**')
+            if st.button('📋 Generate Text Report'):
+                formatted_text = report_generator.format_report_text(report_data)
+                st.text_area(
+                    'Report Text (Copy to clipboard)',
+                    value=formatted_text,
+                    height=400,
+                    help='Copy this text to paste into emails or documents'
+                )
+                
+                # Offer text download
+                st.download_button(
+                    label='💾 Download Text Report',
+                    data=formatted_text,
+                    file_name=f"weekly_report_{report_data['report_period']['start_date']}.txt",
+                    mime='text/plain'
+                )
+        else:
+            st.info('ℹ️ Generate a report first to access export options.')
 
 def show_daily_task_feed():
     st.header('📅 Daily Task Feed')

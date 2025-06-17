@@ -69,6 +69,15 @@ A comprehensive Streamlit-based educational task management system designed for 
    - Export functionality with CSV download for daily reports
    - Visual completion analytics with pie charts and category breakdowns
 
+8. **Weekly SPED Task Report Generator** (`reporting_module.py`)
+   - Comprehensive weekly report generation for SPED staff and administrators
+   - Automated task completion summaries with missed task identification
+   - IEP goal coverage analysis using intelligent keyword mapping
+   - Individual staff reports and master reports for all staff members
+   - Multi-format export capabilities (CSV detailed, CSV summary, text format)
+   - Historical reporting support for multiple week periods
+   - Integration with Streamlit Reports dashboard with tabbed interface
+
 ### Database Schema
 - **Students**: id, name, goals, needs, ard_date
 - **Staff**: id, name, expertise
@@ -90,9 +99,25 @@ A comprehensive Streamlit-based educational task management system designed for 
 - **Bulk Processing**: Generate recommendations for all students simultaneously
 - **Progress Tracking**: Completion rates and analytics with urgency indicators
 - **Export Capabilities**: CSV download and daily report generation
+- **Weekly SPED Reporting**: Comprehensive weekly reports with completion summaries and goal coverage
+- **Multi-Format Export**: CSV, text, and summary exports for administrative reporting
+- **Historical Analysis**: Multi-week reporting capabilities for trend analysis
+- **Administrative Dashboard**: Master reports covering all staff with performance metrics
 - **Responsive UI**: Professional interface with icons and organized layout
 
 ## Recent Changes
+
+### 2025-01-16: Weekly SPED Task Report Generator Implementation
+- Built comprehensive Weekly SPED Task Report Generator module for administrative reporting
+- Created automated weekly report generation with completion summaries and missed task analysis
+- Implemented IEP goal coverage mapping using keyword matching algorithms
+- Added support for individual staff reports and master reports for all staff
+- Built CSV export functionality with detailed and summary report options
+- Integrated text format export for email and document sharing
+- Added multi-week historical reporting capabilities (current week to 4 weeks back)
+- Connected all reporting data with completion timestamps and goal coverage analytics
+- Fully integrated into Streamlit Reports section with tabbed interface
+- Successfully tested report generation, goal mapping, and export functionality
 
 ### 2025-01-16: Teacher Interface Module Implementation
 - Built comprehensive Teacher Task Interface module for daily task management
