@@ -200,6 +200,9 @@ class RecurringTaskGenerator:
             
             if not is_school_day:
                 results['skipped_tasks'].append(f"No school day: {reason}")
+                results['success'] = True
+                results['tasks_created'] = 0
+                results['summary'] = f"No school day: {reason}"
                 return results
             
             # Get all active recurring task templates

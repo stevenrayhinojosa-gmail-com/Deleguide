@@ -130,7 +130,8 @@ class InferenceTestSuite:
             print(f"Tasks due today: {len(today_tasks)}")
             
             for task in today_tasks[:3]:  # Show first 3 tasks
-                print(f"  - {task['description']} (Student: {task['student_name']})")
+                student_name = task.student.name if task.student else "Unknown Student"
+                print(f"  - {task.description} (Student: {student_name})")
             
             # Test full daily feed generation
             daily_feed = feed_generator.generate_daily_feed()
