@@ -10,6 +10,7 @@ from task_recommender import TaskRecommendationEngine
 from scheduling_engine import TaskSchedulingEngine
 from recurring_task_generator import RecurringTaskGenerator
 from teacher_interface import TeacherTaskInterface
+from reporting_module import WeeklyReportGenerator
 
 # Page configuration
 st.set_page_config(
