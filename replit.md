@@ -22,7 +22,7 @@ A comprehensive Streamlit-based educational task management system designed for 
 
 ### Core Components
 1. **Streamlit Frontend** (`app.py`)
-   - Multi-page navigation (Dashboard, Daily Task Feed, Student/Staff/Task Management, Progress Tracking, Reports)
+   - Multi-page navigation (Dashboard, Daily Task Feed, Task Recommendations, Smart Scheduling, Recurring Tasks, Student/Staff/Task Management, Progress Tracking, Reports)
    - Interactive forms for data entry
    - Real-time data visualization with Plotly
    - Responsive design with custom CSS
@@ -33,13 +33,27 @@ A comprehensive Streamlit-based educational task management system designed for 
    - Relationship mapping between entities
    - Enhanced with ARD dates and task frequency tracking
 
-3. **Daily Task Feed Generator** (`daily_task_feed.py`)
+3. **Recurring Task Generator** (`recurring_task_generator.py`)
+   - Automated daily task generation for active school days
+   - School calendar integration with holiday/break detection
+   - Task exception system for staff-declared skip dates
+   - Recurring task template management with frequency support
+   - School calendar event management and reporting
+
+4. **Smart Scheduling Engine** (`scheduling_engine.py`)
+   - Intelligent due date calculations for frequency-based tasks
+   - Grading period alignment with academic calendar
+   - ARD-based scheduling with configurable buffer periods
+   - Deadline update system with preview and auto-update options
+   - Comprehensive scheduling reports with urgency indicators
+
+5. **Daily Task Feed Generator** (`daily_task_feed.py`)
    - Automated task scheduling based on frequency patterns
    - ARD date proximity notifications (21-day alert window)
    - Staff-specific task summaries
    - Console and web-based output formats
 
-4. **Task Recommendation Engine** (`task_recommender.py`)
+6. **Task Recommendation Engine** (`task_recommender.py`)
    - AI-powered task suggestions based on IEP goals and student needs
    - Rule-based keyword matching system with comprehensive dictionaries
    - Staff expertise matching for optimal task assignment
@@ -53,17 +67,40 @@ A comprehensive Streamlit-based educational task management system designed for 
 - **Tasks**: id, description, category, staff_id, student_id, deadline, completed, frequency, last_completed
 
 ### Key Features
-- **Task Frequency Support**: Daily, Once a Month, Every 9 Weeks, Once a Year, Once
+- **Task Frequency Support**: Daily, Weekly, Monthly, Every 9 Weeks, Once a Year, Once
 - **ARD Integration**: Automatic countdown and task generation for ARD preparation
+- **Recurring Task Automation**: Automated daily task generation with school calendar integration
+- **Smart Scheduling Engine**: Intelligent due date calculations based on academic calendar
+- **Task Exception System**: Staff can skip recurring tasks for specific dates with reasons
+- **School Calendar Integration**: Holiday and break detection with event management
 - **Daily Feed Generation**: Automated morning task lists for each staff member
 - **AI Task Recommendations**: Intelligent task suggestions based on IEP goals and student needs
 - **Staff Expertise Matching**: Automatic assignment of tasks to appropriately skilled staff
 - **One-Click Task Creation**: Direct creation of recommended tasks with optimal settings
 - **Bulk Processing**: Generate recommendations for all students simultaneously
-- **Progress Tracking**: Completion rates and analytics
+- **Progress Tracking**: Completion rates and analytics with urgency indicators
 - **Responsive UI**: Professional interface with icons and organized layout
 
 ## Recent Changes
+
+### 2025-01-16: Recurring Task Generator Implementation
+- Built comprehensive recurring task automation system with intelligent scheduling
+- Created automated daily task generation for active school days
+- Implemented school calendar integration with holiday/break detection
+- Added task exception system for staff-declared skip dates (absences, field trips)
+- Built recurring task template management with frequency support
+- Integrated school calendar management with event tracking
+- Added complete task generation reporting and preview functionality
+- Supports Daily, Weekly, Monthly, and Every 9 Weeks frequency patterns
+
+### 2025-01-16: Smart Scheduling Engine Implementation
+- Built intelligent due date calculator for non-daily tasks
+- Added support for frequency-based scheduling (Daily, Monthly, Every 9 Weeks, Once a Year)
+- Implemented grading period calculations aligned with school calendar
+- Created ARD-based scheduling with 3-week buffer for yearly tasks
+- Added deadline update system with preview and auto-update options
+- Built comprehensive scheduling reports with urgency indicators
+- Integrated task frequency distribution analytics
 
 ### 2025-01-16: Task Recommendation Engine Implementation
 - Built comprehensive AI-powered task recommendation system

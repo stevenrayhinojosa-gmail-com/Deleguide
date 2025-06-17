@@ -8,6 +8,7 @@ from sqlalchemy import Integer
 from daily_task_feed import DailyTaskFeedGenerator
 from task_recommender import TaskRecommendationEngine
 from scheduling_engine import TaskSchedulingEngine
+from recurring_task_generator import RecurringTaskGenerator
 
 # Page configuration
 st.set_page_config(
@@ -37,7 +38,7 @@ with st.sidebar:
     st.markdown('---')
     page = st.selectbox(
         'Choose a section',
-        ['Dashboard', 'Daily Task Feed', 'Task Recommendations', 'Smart Scheduling', 'Student Management', 'Staff Management', 'Task Management', 'Progress Tracking', 'Reports'],
+        ['Dashboard', 'Daily Task Feed', 'Task Recommendations', 'Smart Scheduling', 'Recurring Tasks', 'Student Management', 'Staff Management', 'Task Management', 'Progress Tracking', 'Reports'],
         index=0
     )
     st.markdown('---')
@@ -744,6 +745,264 @@ def show_smart_scheduling():
         
         st.info("Scheduling settings can be customized in the scheduling_engine.py file.")
 
+def show_recurring_tasks():
+    st.header('🔁 Recurring Task Automation')
+    st.subheader('Automated Daily Task Generation')
+    
+    recurring_generator = RecurringTaskGenerator()
+    
+    # Current status section
+    st.markdown("---")
+    st.subheader('📊 System Status')
+    
+    col1, col2, col3 = st.columns(3)
+    
+    # Get system statistics
+    session = db
+    template_count = session.execute(text("SELECT COUNT(*) FROM recurring_task_templates")).scalar()
+    exception_count = session.execute(text("SELECT COUNT(*) FROM task_exceptions")).scalar()
+    calendar_count = session.execute(text("SELECT COUNT(*) FROM school_calendar")).scalar()
+    
+    with col1:
+        st.metric("Recurring Templates", template_count)
+    with col2:
+        st.metric("Task Exceptions", exception_count)
+    with col3:
+        st.metric("Calendar Events", calendar_count)
+    
+    # Today's generation section
+    st.markdown("---")
+    st.subheader('🗓️ Today\'s Task Generation')
+    
+    today = datetime.now().date()
+    is_school_day, reason = recurring_generator.is_school_day(today)
+    
+    if is_school_day:
+        st.success(f"✅ Today is a school day")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button('🚀 Generate Today\'s Tasks', type='primary'):
+                results = recurring_generator.generate_recurring_tasks(today)
+                
+                if results['generated_tasks']:
+                    st.success(f"✅ Generated {len(results['generated_tasks'])} recurring tasks!")
+                    
+                    with st.expander("View Generated Tasks"):
+                        for task in results['generated_tasks']:
+                            st.write(f"• {task}")
+                    
+                    st.rerun()
+                else:
+                    st.info("No new tasks to generate today.")
+                
+                if results['skipped_tasks']:
+                    with st.expander("Skipped Tasks"):
+                        for task in results['skipped_tasks']:
+                            st.write(f"• {task}")
+        
+        with col2:
+            if st.button('📋 Preview Generation'):
+                results = recurring_generator.generate_recurring_tasks(today)
+                
+                st.write("**Preview of tasks that would be generated:**")
+                if results['generated_tasks']:
+                    for task in results['generated_tasks']:
+                        st.write(f"• {task}")
+                else:
+                    st.write("No tasks would be generated today.")
+    else:
+        st.warning(f"❌ Not a school day: {reason}")
+    
+    # Recurring templates management
+    st.markdown("---")
+    st.subheader('📝 Recurring Task Templates')
+    
+    # Filter by staff
+    staff_members = session.query(Staff).all()
+    staff_options = ['All Staff'] + [s.name for s in staff_members]
+    selected_staff = st.selectbox('Filter by staff member:', staff_options)
+    
+    # Get templates
+    if selected_staff == 'All Staff':
+        templates = recurring_generator.get_recurring_templates()
+    else:
+        staff_obj = session.query(Staff).filter(Staff.name == selected_staff).first()
+        if staff_obj:
+            templates = recurring_generator.get_recurring_templates(staff_obj.id)
+        else:
+            templates = []
+    
+    if templates:
+        # Display templates in a table format
+        template_data = []
+        for template in templates:
+            template_id, task_name, category, frequency, is_active, staff_id, student_id, last_generated_date, created_at = template
+            
+            # Get staff name
+            staff = session.query(Staff).filter(Staff.id == staff_id).first()
+            staff_name = staff.name if staff else "Unknown"
+            
+            # Get student name if applicable
+            if student_id:
+                student = session.query(Student).filter(Student.id == student_id).first()
+                student_name = student.name if student else "Unknown"
+            else:
+                student_name = "All Students"
+            
+            template_data.append({
+                'Task Name': task_name,
+                'Category': category,
+                'Frequency': frequency,
+                'Staff': staff_name,
+                'Students': student_name,
+                'Active': '✅' if is_active else '❌',
+                'Last Generated': str(last_generated_date) if last_generated_date else 'Never'
+            })
+        
+        df = pd.DataFrame(template_data)
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.info("No recurring task templates found.")
+    
+    # Add new template section
+    st.markdown("---")
+    st.subheader('➕ Add New Recurring Template')
+    
+    with st.expander("Create New Template"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            new_task_name = st.text_input('Task Name')
+            new_category = st.selectbox('Category', ['Administrative', 'Therapy', 'Documentation', 'Assessment', 'General'])
+            new_frequency = st.selectbox('Frequency', ['Daily', 'Weekly', 'Monthly', 'Every 9 Weeks'])
+        
+        with col2:
+            staff_for_template = st.selectbox('Assign to Staff', [s.name for s in staff_members])
+            student_for_template = st.selectbox('Assign to Student (optional)', ['All Students'] + [s.name for s in session.query(Student).all()])
+        
+        if st.button('Create Template'):
+            if new_task_name and staff_for_template:
+                # Get staff ID
+                staff_obj = session.query(Staff).filter(Staff.name == staff_for_template).first()
+                
+                # Get student ID if specified
+                student_id = None
+                if student_for_template != 'All Students':
+                    student_obj = session.query(Student).filter(Student.name == student_for_template).first()
+                    if student_obj:
+                        student_id = student_obj.id
+                
+                if staff_obj:
+                    success = recurring_generator.add_recurring_task_template(
+                        new_task_name, new_category, new_frequency, staff_obj.id, student_id
+                    )
+                    
+                    if success:
+                        st.success("✅ Template created successfully!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to create template.")
+                else:
+                    st.error("❌ Staff member not found.")
+            else:
+                st.error("❌ Please fill in all required fields.")
+    
+    # Task exceptions management
+    st.markdown("---")
+    st.subheader('🚫 Task Exceptions')
+    
+    with st.expander("Add Task Exception"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            exception_staff = st.selectbox('Staff Member', [s.name for s in staff_members], key='exception_staff')
+            exception_task = st.text_input('Task Name to Skip')
+            exception_date = st.date_input('Exception Date')
+        
+        with col2:
+            exception_student = st.selectbox('Student (optional)', ['All Students'] + [s.name for s in session.query(Student).all()], key='exception_student')
+            exception_reason = st.text_input('Reason for Exception')
+        
+        if st.button('Add Exception'):
+            if exception_staff and exception_task and exception_reason:
+                # Get staff ID
+                staff_obj = session.query(Staff).filter(Staff.name == exception_staff).first()
+                
+                # Get student ID if specified
+                student_id = None
+                if exception_student != 'All Students':
+                    student_obj = session.query(Student).filter(Student.name == exception_student).first()
+                    if student_obj:
+                        student_id = student_obj.id
+                
+                if staff_obj:
+                    success = recurring_generator.add_task_exception(
+                        staff_obj.id, exception_task, exception_date, exception_reason, student_id
+                    )
+                    
+                    if success:
+                        st.success("✅ Exception added successfully!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to add exception.")
+                else:
+                    st.error("❌ Staff member not found.")
+            else:
+                st.error("❌ Please fill in all required fields.")
+    
+    # School calendar management
+    st.markdown("---")
+    st.subheader('📅 School Calendar')
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Upcoming School Events:**")
+        
+        # Show next 10 calendar events
+        upcoming_events = session.execute(text(
+            "SELECT date, event_name, event_type FROM school_calendar WHERE date >= CURRENT_DATE ORDER BY date LIMIT 10"
+        )).fetchall()
+        
+        if upcoming_events:
+            for event in upcoming_events:
+                event_date, event_name, event_type = event
+                st.write(f"📅 {event_date}: {event_name} ({event_type})")
+        else:
+            st.info("No upcoming events scheduled.")
+    
+    with col2:
+        with st.expander("Add Calendar Event"):
+            cal_date = st.date_input('Event Date')
+            cal_name = st.text_input('Event Name')
+            cal_type = st.selectbox('Event Type', ['holiday', 'break', 'staff_development', 'other'])
+            
+            if st.button('Add Event'):
+                if cal_name:
+                    try:
+                        session.execute(text(
+                            "INSERT INTO school_calendar (date, event_name, event_type) VALUES (:date, :name, :type)"
+                        ), {"date": cal_date, "name": cal_name, "type": cal_type})
+                        session.commit()
+                        st.success("✅ Event added to calendar!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error adding event: {str(e)}")
+                else:
+                    st.error("❌ Please enter an event name.")
+    
+    # Generation report
+    st.markdown("---")
+    st.subheader('📊 Generation Report')
+    
+    test_date = st.date_input('Generate report for date:', value=today)
+    
+    if st.button('📄 Generate Report'):
+        report = recurring_generator.generate_summary_report(test_date)
+        st.text_area("Recurring Task Report", report, height=400)
+
 def show_dashboard():
     st.header('🎯 Educational Task Management Dashboard')
     st.write('Welcome to the Educational Task Management System! This platform helps you manage and track educational tasks for students and staff.')
@@ -809,6 +1068,8 @@ elif page == 'Task Recommendations':
     show_task_recommendations()
 elif page == 'Smart Scheduling':
     show_smart_scheduling()
+elif page == 'Recurring Tasks':
+    show_recurring_tasks()
 elif page == 'Progress Tracking':
     track_progress()
 elif page == 'Reports':

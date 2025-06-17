@@ -1,58 +1,12 @@
 from datetime import datetime, date, timedelta
-from sqlalchemy import Column, Integer, String, Date, Boolean, ForeignKey, Text
-from sqlalchemy.orm import relationship
-from models import Base, engine, Student, Staff, Task, SessionLocal
+from sqlalchemy import text
+from models import engine, Student, Staff, Task, SessionLocal
 from typing import Dict, List, Optional, Tuple
 import calendar
-
-class SchoolCalendar(Base):
-    """Track non-instructional days (holidays, breaks, etc.)"""
-    __tablename__ = 'school_calendar'
-    
-    id = Column(Integer, primary_key=True)
-    date = Column(Date, nullable=False, unique=True)
-    event_name = Column(String, nullable=False)
-    event_type = Column(String, default='holiday')  # holiday, break, staff_development, etc.
-    description = Column(Text)
-
-class TaskException(Base):
-    """Track teacher-declared exceptions for specific tasks on specific days"""
-    __tablename__ = 'task_exceptions'
-    
-    id = Column(Integer, primary_key=True)
-    staff_id = Column(Integer, ForeignKey('staff.id'))
-    student_id = Column(Integer, ForeignKey('students.id'), nullable=True)
-    task_template_name = Column(String, nullable=False)  # Template task name
-    exception_date = Column(Date, nullable=False)
-    reason = Column(String, nullable=False)
-    created_at = Column(Date, default=date.today)
-    
-    staff_member = relationship("Staff", foreign_keys=[staff_id])
-    student = relationship("Student", foreign_keys=[student_id])
-
-class RecurringTaskTemplate(Base):
-    """Templates for recurring tasks"""
-    __tablename__ = 'recurring_task_templates'
-    
-    id = Column(Integer, primary_key=True)
-    task_name = Column(String, nullable=False)
-    category = Column(String, nullable=False)
-    frequency = Column(String, nullable=False)  # Daily, Weekly, Monthly, Every 9 Weeks
-    is_active = Column(Boolean, default=True)
-    staff_id = Column(Integer, ForeignKey('staff.id'))
-    student_id = Column(Integer, ForeignKey('students.id'), nullable=True)  # NULL for all students
-    last_generated_date = Column(Date)
-    created_at = Column(Date, default=date.today)
-    
-    staff_member = relationship("Staff", foreign_keys=[staff_id])
-    student = relationship("Student", foreign_keys=[student_id])
 
 class RecurringTaskGenerator:
     def __init__(self):
         self.Session = SessionLocal
-        
-        # Create simple tables if they don't exist
-        self._create_tables()
         
         # School calendar configuration
         self.school_year_start = date(2024, 8, 26)
@@ -85,14 +39,14 @@ class RecurringTaskGenerator:
             ('2025-05-26', 'Memorial Day')
         ]
         
-        self._initialize_default_data()
+        self._initialize_system()
     
-    def _create_tables(self):
-        """Create simple tables using raw SQL"""
+    def _initialize_system(self):
+        """Initialize the recurring task system with default data"""
         session = self.Session()
         
         try:
-            # Create school_calendar table
+            # Create simple tables using raw SQL
             session.execute(text("""
                 CREATE TABLE IF NOT EXISTS school_calendar (
                     id SERIAL PRIMARY KEY,
@@ -103,7 +57,6 @@ class RecurringTaskGenerator:
                 )
             """))
             
-            # Create task_exceptions table  
             session.execute(text("""
                 CREATE TABLE IF NOT EXISTS task_exceptions (
                     id SERIAL PRIMARY KEY,
@@ -116,7 +69,6 @@ class RecurringTaskGenerator:
                 )
             """))
             
-            # Create recurring_task_templates table
             session.execute(text("""
                 CREATE TABLE IF NOT EXISTS recurring_task_templates (
                     id SERIAL PRIMARY KEY,
@@ -131,19 +83,6 @@ class RecurringTaskGenerator:
                 )
             """))
             
-            session.commit()
-            
-        except Exception as e:
-            session.rollback()
-            print(f"Error creating tables: {e}")
-        finally:
-            session.close()
-    
-    def _initialize_default_data(self):
-        """Initialize default holidays and recurring task templates"""
-        session = self.Session()
-        
-        try:
             # Add default holidays if they don't exist
             for holiday_date, holiday_name in self.default_holidays:
                 result = session.execute(text(
@@ -155,7 +94,7 @@ class RecurringTaskGenerator:
                         "INSERT INTO school_calendar (date, event_name, event_type) VALUES (:date, :name, 'holiday')"
                     ), {"date": holiday_date, "name": holiday_name})
             
-            # Add default recurring task templates if they don't exist
+            # Add default recurring task templates for existing staff
             staff_members = session.query(Staff).all()
             
             default_templates = [
@@ -182,17 +121,12 @@ class RecurringTaskGenerator:
             
         except Exception as e:
             session.rollback()
-            print(f"Error initializing default data: {e}")
+            print(f"Error initializing recurring task system: {e}")
         finally:
             session.close()
     
     def is_school_day(self, check_date: date) -> Tuple[bool, Optional[str]]:
-        """
-        Check if a given date is a school day
-        
-        Returns:
-            Tuple of (is_school_day, reason_if_not)
-        """
+        """Check if a given date is a school day"""
         session = self.Session()
         
         try:
@@ -218,86 +152,18 @@ class RecurringTaskGenerator:
         finally:
             session.close()
     
-    def has_task_exception(self, staff_id: int, task_name: str, check_date: date, 
-                          student_id: Optional[int] = None) -> Tuple[bool, Optional[str]]:
-        """
-        Check if there's an exception for a specific task on a specific date
-        
-        Returns:
-            Tuple of (has_exception, reason)
-        """
-        session = self.Session()
-        
-        try:
-            if student_id:
-                result = session.execute(text(
-                    "SELECT reason FROM task_exceptions WHERE staff_id = :staff_id AND task_template_name = :task_name AND exception_date = :date AND student_id = :student_id"
-                ), {"staff_id": staff_id, "task_name": task_name, "date": check_date, "student_id": student_id})
-            else:
-                result = session.execute(text(
-                    "SELECT reason FROM task_exceptions WHERE staff_id = :staff_id AND task_template_name = :task_name AND exception_date = :date AND student_id IS NULL"
-                ), {"staff_id": staff_id, "task_name": task_name, "date": check_date})
-            
-            exception = result.fetchone()
-            if exception:
-                return True, exception[0]
-            
-            return False, None
-            
-        finally:
-            session.close()
-    
-    def task_already_generated(self, template_id: int, check_date: date) -> bool:
-        """Check if a task has already been generated for today from this template"""
-        session = self.Session()
-        
-        try:
-            # Get template info
-            result = session.execute(text(
-                "SELECT task_name, staff_id, student_id FROM recurring_task_templates WHERE id = :id"
-            ), {"id": template_id})
-            
-            template_data = result.fetchone()
-            if not template_data:
-                return True  # If template doesn't exist, consider it "already generated"
-            
-            task_name, staff_id, student_id = template_data
-            
-            # Check if a task with this template's characteristics exists for today
-            if student_id:
-                result = session.execute(text(
-                    "SELECT COUNT(*) FROM tasks WHERE description = :desc AND staff_id = :staff_id AND student_id = :student_id AND deadline = :date"
-                ), {"desc": task_name, "staff_id": staff_id, "student_id": student_id, "date": check_date})
-            else:
-                result = session.execute(text(
-                    "SELECT COUNT(*) FROM tasks WHERE description = :desc AND staff_id = :staff_id AND deadline = :date"
-                ), {"desc": task_name, "staff_id": staff_id, "date": check_date})
-            
-            return result.scalar() > 0
-            
-        finally:
-            session.close()
-    
-    def should_generate_today(self, template_data: tuple, check_date: date) -> bool:
-        """Determine if a template should generate a task today based on frequency"""
-        template_id, task_name, category, frequency, is_active, staff_id, student_id, last_generated_date, created_at = template_data
-        
-        if not is_active:
-            return False
-        
+    def should_generate_today(self, frequency: str, check_date: date) -> bool:
+        """Determine if a task should be generated today based on frequency"""
         frequency = frequency.lower()
         
         if frequency == 'daily':
             return True
-        
         elif frequency == 'weekly':
             # Generate on Mondays (weekday 0)
             return check_date.weekday() == 0
-        
         elif frequency == 'monthly':
             # Generate on the 1st of each month
             return check_date.day == 1
-        
         elif frequency == 'every 9 weeks':
             # Generate at the start of each grading period
             grading_periods = [
@@ -306,21 +172,12 @@ class RecurringTaskGenerator:
                 self.school_year_start + timedelta(weeks=18),  # Period 3 start
                 self.school_year_start + timedelta(weeks=27),  # Period 4 start
             ]
-            
             return check_date in grading_periods
         
         return False
     
     def generate_recurring_tasks(self, target_date: Optional[date] = None) -> Dict:
-        """
-        Generate all recurring tasks for a specific date
-        
-        Args:
-            target_date: Date to generate tasks for (defaults to today)
-            
-        Returns:
-            Dictionary with generation results
-        """
+        """Generate all recurring tasks for a specific date"""
         if target_date is None:
             target_date = date.today()
         
@@ -347,20 +204,29 @@ class RecurringTaskGenerator:
             
             # Get all active recurring task templates
             result = session.execute(text(
-                "SELECT * FROM recurring_task_templates WHERE is_active = true"
+                "SELECT id, task_name, category, frequency, staff_id, student_id FROM recurring_task_templates WHERE is_active = true"
             ))
             templates = result.fetchall()
             
             for template in templates:
                 try:
-                    template_id, task_name, category, frequency, is_active, staff_id, student_id, last_generated_date, created_at = template
+                    template_id, task_name, category, frequency, staff_id, student_id = template
                     
                     # Check if we should generate this task today
-                    if not self.should_generate_today(template, target_date):
+                    if not self.should_generate_today(frequency, target_date):
                         continue
                     
-                    # Check if task already generated
-                    if self.task_already_generated(template_id, target_date):
+                    # Check if task already generated today
+                    if student_id:
+                        existing_check = session.execute(text(
+                            "SELECT COUNT(*) FROM tasks WHERE description = :desc AND staff_id = :staff_id AND student_id = :student_id AND deadline = :date"
+                        ), {"desc": task_name, "staff_id": staff_id, "student_id": student_id, "date": target_date})
+                    else:
+                        existing_check = session.execute(text(
+                            "SELECT COUNT(*) FROM tasks WHERE description = :desc AND staff_id = :staff_id AND deadline = :date"
+                        ), {"desc": task_name, "staff_id": staff_id, "date": target_date})
+                    
+                    if existing_check.scalar() > 0:
                         staff = session.query(Staff).filter(Staff.id == staff_id).first()
                         staff_name = staff.name if staff else "Unknown Staff"
                         results['skipped_tasks'].append(
@@ -369,20 +235,23 @@ class RecurringTaskGenerator:
                         continue
                     
                     # Check for exceptions
-                    has_exception, exception_reason = self.has_task_exception(
-                        staff_id, 
-                        task_name, 
-                        target_date, 
-                        student_id
-                    )
+                    if student_id:
+                        exception_check = session.execute(text(
+                            "SELECT reason FROM task_exceptions WHERE staff_id = :staff_id AND task_template_name = :task_name AND exception_date = :date AND student_id = :student_id"
+                        ), {"staff_id": staff_id, "task_name": task_name, "date": target_date, "student_id": student_id})
+                    else:
+                        exception_check = session.execute(text(
+                            "SELECT reason FROM task_exceptions WHERE staff_id = :staff_id AND task_template_name = :task_name AND exception_date = :date AND student_id IS NULL"
+                        ), {"staff_id": staff_id, "task_name": task_name, "date": target_date})
                     
-                    if has_exception:
+                    exception = exception_check.fetchone()
+                    if exception:
                         results['exceptions'].append(
-                            f"Exception: {task_name} - {exception_reason}"
+                            f"Exception: {task_name} - {exception[0]}"
                         )
                         continue
                     
-                    # Get staff and student info for logging
+                    # Get staff info for logging
                     staff = session.query(Staff).filter(Staff.id == staff_id).first()
                     staff_name = staff.name if staff else "Unknown Staff"
                     
@@ -407,7 +276,7 @@ class RecurringTaskGenerator:
                             f"{task_name} → {student_name} (assigned to {staff_name})"
                         )
                     else:
-                        # Task for all students of this staff member
+                        # Task for all students
                         students = session.query(Student).all()
                         
                         for student in students:
@@ -496,36 +365,6 @@ class RecurringTaskGenerator:
                     "SELECT * FROM recurring_task_templates ORDER BY task_name"
                 ))
             
-            return result.fetchall()
-            
-        finally:
-            session.close()
-    
-    def get_task_exceptions(self, staff_id: Optional[int] = None, 
-                           start_date: Optional[date] = None, 
-                           end_date: Optional[date] = None) -> List[tuple]:
-        """Get task exceptions, optionally filtered by staff and date range"""
-        session = self.Session()
-        
-        try:
-            sql = "SELECT * FROM task_exceptions WHERE 1=1"
-            params = {}
-            
-            if staff_id:
-                sql += " AND staff_id = :staff_id"
-                params["staff_id"] = staff_id
-            
-            if start_date:
-                sql += " AND exception_date >= :start_date"
-                params["start_date"] = start_date
-            
-            if end_date:
-                sql += " AND exception_date <= :end_date"
-                params["end_date"] = end_date
-            
-            sql += " ORDER BY exception_date DESC"
-            
-            result = session.execute(text(sql), params)
             return result.fetchall()
             
         finally:
